@@ -6,6 +6,9 @@
 
 // #define DEBUG 1
 
+// Detección de electrodo desconectado (LOD+/LOD- del AD8232). Desactivada: sin ISR, sin corte de la señal.
+#define ENABLE_LEAD_OFF_DETECT 0
+
 class EcgTask {
 public:
     struct Snapshot {
@@ -14,14 +17,25 @@ public:
         uint16_t sample;
     };
 
+    /**
+     * @brief Constructor de la clase EcgTask
+     * @param hmi Referencia al objeto NextionHMI
+     */
     EcgTask(NextionHMI& hmi);
+
+    /**
+     * @brief Inicializa la tarea de muestreo de ECG
+     * @note Esta función debe llamarse antes de iniciar el bucle principal del programa
+     *       y antes de que se llame a getSnapshot().
+     */
     void begin();
     Snapshot  getSnapshot();
+
 private:
     
     static constexpr uint8_t analogPin= 34;
-    static constexpr float sampleRateHz = 1000.0f/3.0f;
-    static constexpr uint8_t GraphRateHz= 144;
+    static constexpr float sampleRateHz = 1000.0f/2.0f;
+    static constexpr uint16_t GraphRateHz= 50;
     static constexpr uint8_t GraphId= 1;
     static constexpr uint8_t GraphChannel= 0;
     static constexpr uint8_t SamplePeriodMs= 3;
@@ -43,6 +57,7 @@ private:
     static volatile bool s_leadOffFlag;          // La ISR solo la marca; _electrodeCheck() la consume
     static constexpr uint8_t isrPinLOMinus= 17;  // LOD- del AD8232 (electrodo derecho)
     static constexpr uint8_t isrPinLOPlus= 16;   // LOD+ del AD8232 (electrodo izquierdo)
-    static void IRAM_ATTR _onLeadOffChange();    // ISR: código mínimo, sin 'this'
-    void _electrodeCheck();                      // Llamada desde _taskLoop(); NO es la ISR
+    static void IRAM_ATTR _onLeadOffChange();    // ISR: código mínimo
+    bool _leadOffState= false;                   // Estado actual de los electrodos; lo lee _electrodeCheck()   
+    void _electrodeCheck();                      // Llamada desde _taskLoop(); 
 };
