@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <NextionHMI.h>
+#include <WaveDecimator.h>
 #include "biosignals.h"
 
 class PpgTask {
@@ -13,15 +14,17 @@ class PpgTask {
             float    filtered;    // muestra tras el filtro PPG (centrada en 0)
         };
 
+        using SampleSource = uint16_t (*)();   // Devuelve una muestra 0..4095 (p. ej. señal simulada)
+
         PpgTask(NextionHMI& hmi);
-        void begin();
+        void begin(SampleSource source = nullptr);   // nullptr = leer el ADC (analogPin)
         Snapshot getSnapshot();
 
     private:
         
         static constexpr uint8_t analogPin= 35;
         static constexpr float sampleRateHz = 1000.0f/4.0f;
-        static constexpr uint8_t GraphRateHz= 144;
+        static constexpr uint16_t GraphDecimation= 4;   // Muestras por ventana: 2·333/5 ≈ 133 puntos/s en la gráfica
         static constexpr uint8_t GraphId= 2;
         static constexpr uint8_t GraphChannel= 0;
         static constexpr uint8_t SamplePeriodMs= 3;
@@ -29,6 +32,8 @@ class PpgTask {
         // --- Filtro PPG (independiente del Pan-Tompkins del ECG) ---
         static constexpr float PpgHpFc = PPG_HP_FC;  // 0.5 Hz, Butterworth orden 2
         static constexpr float PpgLpFc = PPG_LP_FC;  // 4 Hz, Butterworth orden 2 (0 = desactivado)
+        static constexpr bool  InvertSignal  = false;  // true = invierte la muestra (4095 - x) si el sensor baja de voltaje en sístole
+        static constexpr bool  GraphFiltered = false;  // false = graficar la señal cruda; true = la filtrada
         static constexpr float GraphGain   = 1.0f;   // escala de la señal filtrada en la gráfica
         static constexpr int32_t GraphOffset = 2048; // la salida filtrada es bipolar: se centra a media escala
         
@@ -59,10 +64,12 @@ class PpgTask {
         static constexpr uint8_t TaskCore= 0;     // Core distinto al de NextionHMI y loop()
         
         NextionHMI& _hmi;
+        WaveDecimator _graph{GraphDecimation};   // Solo lo usa _taskLoop
         Snapshot _shared;                     // Último resultado publicado; protegido por _mutex
         SemaphoreHandle_t _mutex = nullptr;
         TaskHandle_t _taskHandle = nullptr;
         PpgFilter _filter;                    // Solo lo usa _taskLoop (no requiere mutex)
+        SampleSource _source = nullptr;       // Fuente de muestras alternativa al ADC
 
 
         static void _taskEntry(void* self);

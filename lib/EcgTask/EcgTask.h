@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <NextionHMI.h>
+#include <WaveDecimator.h>
 #include <biosignals.h>
 
 // #define DEBUG 1
@@ -35,7 +36,7 @@ private:
     
     static constexpr uint8_t analogPin= 34;
     static constexpr float sampleRateHz = 1000.0f/2.0f;
-    static constexpr uint16_t GraphRateHz= 50;
+    static constexpr uint16_t GraphDecimation = 4;   // Muestras por ventana: 2·333/13 ≈ 51 puntos/s en la gráfica
     static constexpr uint8_t GraphId= 1;
     static constexpr uint8_t GraphChannel= 0;
     static constexpr uint8_t SamplePeriodMs= 3;
@@ -48,6 +49,7 @@ private:
     void _taskLoop();                     // Bucle de la tarea: muestrea, calcula y publica
 
     NextionHMI& _hmi;
+    WaveDecimator _graph{GraphDecimation};  // Diezma la señal para la gráfica
     PanTompkins _pt;                      // Miembro directo (va a .bss), no en la pila de la tarea
     Snapshot _shared;                     // Último resultado publicado; protegido por _mutex
     SemaphoreHandle_t _mutex = nullptr;

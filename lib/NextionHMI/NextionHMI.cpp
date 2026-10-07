@@ -2,14 +2,34 @@
 
 #define GraphHeight 255
 
-// Descomenta SOLO si el Nextion NO está en Serial (UART0); si no, la depuración corrompe el enlace
+// Descomenta para ver en el monitor serie (Serial/USB) cada punto que se envía a las gráficas.
+// El Nextion debe estar en otro UART (Serial2); si comparte Serial, la depuración corrompe el enlace
 // #define NEXTION_DEBUG
 
+const char* const NextionHMI::NumObjects[ValCount] = {
+    "nSpO2.val",
+    "nHR.val",
+    "nPR.val",
+    "nHRV.val",
+    "nT.val",
+    "nRR.val"
+};
+
+NextionHMI* NextionHMI::_instance = nullptr;
+
+void easyNexReadCustomCommand (){
+    if (NextionHMI::_instance != nullptr) {
+        NextionHMI::_instance->_onCustomCommand();
+    }
+}
 
 
 NextionHMI::NextionHMI(HardwareSerial& serial)
     : _myNex(serial), _serial(serial) {
-    invalidateCache();
+    for (uint8_t i = 0; i < ValCount; i++) {
+        _wanted[i] = Unknown;
+    }
+    _invalidate();
 }
 
 void NextionHMI::begin(uint32_t baudRate, uint8_t rxPin, uint8_t txPin, uint32_t RefreshRate) {
@@ -21,7 +41,7 @@ void NextionHMI::begin(uint32_t baudRate, uint8_t rxPin, uint8_t txPin, uint32_t
     if (RefreshRate > 0) {
         _refreshRate = RefreshRate;
     }
-    
+
     if (_queue == nullptr) {
         _queue = xQueueCreate(QueueSize, sizeof(msg));
     }
@@ -32,7 +52,7 @@ void NextionHMI::begin(uint32_t baudRate, uint8_t rxPin, uint8_t txPin, uint32_t
     if (_vitalsBox == nullptr || _queue == nullptr) {
         return ;
     }
-
+    _instance = this;
     if (_taskHandle == nullptr) {
         xTaskCreatePinnedToCore(_taskEntry, "NextionHMI", TaskStackSize, this, TaskPriority, &_taskHandle, TaskCore);
     }
@@ -45,6 +65,8 @@ void NextionHMI::graphWaveform(uint8_t id, uint8_t channel, uint32_t value) {
     msg m{msg::Wave, id, channel, (int32_t)value};
     xQueueSend(_queue, &m, 0);
 }
+
+
 bool  NextionHMI:: configWaveform(uint8_t id, uint8_t channel, uint32_t rateHz, uint32_t MapValue) {
     if (_queue == nullptr) {
         return false ;
@@ -97,14 +119,12 @@ void NextionHMI::updateValues(int spo2, int bpm, int pulseRate, int hrVariance, 
 
 
 void NextionHMI::invalidateCache() {
-    for (uint8_t i = 0; i < ValCount; i++) {
-        _lastValues[i] = INT32_MIN;
+    if (_queue == nullptr) {
+        return;
     }
-    _lastValuesTime = millis() - ValuesPeriodMs;  // El próximo updateValues() no espera
+    msg m{msg::Invalidate, 0, 0, 0};   // La caché solo la toca la tarea del HMI
+    xQueueSend(_queue, &m, 0);
 }
-
-
-
 
 
 NextionHMI::WaveChannel* NextionHMI::_findWaveform(uint8_t id, uint8_t channel) {
@@ -116,14 +136,72 @@ NextionHMI::WaveChannel* NextionHMI::_findWaveform(uint8_t id, uint8_t channel) 
     return nullptr;
 }
 
-void NextionHMI::_writeNum(ValueId slot, const char* object, int32_t value) {
-    _myNex.writeNum(object, value);
-    _lastValues[slot] = value;
+void NextionHMI::_setNum(ValueId slot, int32_t value) {
+    _wanted[slot] = value;
+    _syncNum(slot);
 }
 
-void NextionHMI::_updateNum(ValueId slot, const char* object, int32_t value) {
-    if (_lastValues[slot] != value) {
-        _writeNum(slot, object, value);
+void NextionHMI::_syncNum(ValueId slot) {
+    if (!_showsNumbers() || _wanted[slot] == Unknown || _lastValues[slot] == _wanted[slot]) {
+        return;
+    }
+    _myNex.writeNum(NumObjects[slot], _wanted[slot]);
+    _lastValues[slot] = _wanted[slot];
+}
+
+void NextionHMI::_invalidate() {
+    for (uint8_t i = 0; i < ValCount; i++) {
+        _lastValues[i] = Unknown;
+    }
+    _lastValuesTime = millis() - ValuesPeriodMs;  // El próximo updateValues() no espera
+}
+
+void NextionHMI::_onPageLoaded(uint8_t page) {
+    _page = page;
+    _fullWfId = AllWaves;  // Por defecto, la página FullWf muestra todas las gráficas
+    _invalidate();   // Al cargar una página el Nextion pierde lo que mostraba
+    for (uint8_t i = 0; i < ValCount; i++) {
+        _syncNum(static_cast<ValueId>(i));
+    }
+#ifdef NEXTION_DEBUG
+    Serial.printf("[nextion] pagina %u\n", page);
+#endif
+}
+
+void NextionHMI::_listen() {
+    while (_serial.available() > 0) {
+        int c = _serial.peek();
+        if (c == '#') {                                  // Comando propio: # <len> <grupo> <datos>
+            if (_serial.available() < 3) {
+                return;                                  // Espera al resto sin bloquear la tarea
+            }
+            _myNex.currentPageId = NoPageEvent;
+            _myNex.NextionListen();
+            if (_myNex.currentPageId != NoPageEvent) {   // Llegó printh 23 02 50 <página>
+                _onPageLoaded((uint8_t)_myNex.currentPageId);
+            }
+        } else if (c == 0x66) {                          // Respuesta a "sendme": 66 <página> FF FF FF
+            if (_serial.available() < 2) {
+                return;
+            }
+            _serial.read();
+            _onPageLoaded((uint8_t)_serial.read());
+        } else {
+            _serial.read();   // Códigos de estado/error y terminadores FF: NextionListen() se trabaría 100 ms con ellos
+        }
+    }
+}
+
+void NextionHMI::_onCustomCommand() {
+    switch (_myNex.cmdGroup){
+        case 'W':                                   // printh 23 02 57 <id>: gráfica visible en full_wf
+            _fullWfId = (uint8_t)_myNex.readByte();
+            break;
+        default:                                    // Grupo desconocido: se descartan sus datos
+            for (uint8_t i =1 ; i < _myNex.cmdLength; i++){
+                _myNex.readByte();
+            }
+            break;
     }
 }
 
@@ -149,11 +227,15 @@ void NextionHMI::_taskEntry(void* self) {
 
 
 void NextionHMI::_taskLoop() {
+    _myNex.writeStr("bkcmd=0");   // Sin respuestas de estado: el RX solo trae comandos útiles
+    _myNex.writeStr("sendme");    // Pregunta la página actual (por si el Nextion ya estaba encendido)
+
     msg m;
     for (;;) {
         if (xQueueReceive(_queue, &m, pdMS_TO_TICKS(TaskPollMs)) == pdTRUE) {
             _handle(m);
         }
+        _listen();
         _flushVitals();
     }
 }
@@ -161,30 +243,28 @@ void NextionHMI::_taskLoop() {
 void NextionHMI::_handle(const msg& m) {
     switch (m.type) {
         case msg::Wave: {
+            if (!_showsWave(m.id)) {
+                break;
+            }
             WaveChannel* wave = _findWaveform(m.id, m.channel);
             _sendWave(m.id, m.channel, (uint32_t)m.value, wave ? wave->mapValue : DefaultMapValue);
             break;
         }
-        case msg::Num :{
-            static const char* objects  [] = {
-                "nSpO2.val",
-                "nHR.val",
-                "nPR.val",
-                "nHRV.val",
-                "nT.val",
-                "nRR.val"
-            };
-            static_assert(sizeof(objects) / sizeof(objects[0]) == ValCount, "objects array size mismatch");
+        case msg::Num :
             if (m.id < ValCount) {
-                _writeNum(static_cast<ValueId>(m.id), objects[m.id], m.value);
+                _setNum(static_cast<ValueId>(m.id), m.value);
             }
             break;
-        }
         case msg:: WaveUpdate:
-            _updateWave(m.id, m.channel, (uint32_t)m.value);
+            if (_showsWave(m.id)) {
+                _updateWave(m.id, m.channel, (uint32_t)m.value);
+            }
             break;
         case msg::WaveConfig:
             _configWave(m.id, m.channel, (uint32_t)m.value, m.mapValue);
+            break;
+        case msg::Invalidate:
+            _onPageLoaded(_page);
             break;
         default:
             break;
@@ -252,10 +332,10 @@ void NextionHMI::_flushVitals() {
     }
     _lastValuesTime = now;
 
-    _updateNum(ValSpO2, "nSpO2.val", v.spo2);
-    _updateNum(ValBPM, "nHR.val", v.bpm);
-    _updateNum(ValPulseRate, "nPR.val", v.pulseRate);
-    _updateNum(ValHRV, "nHRV.val", v.hrVariance);
-    _updateNum(ValTemperature, "nT.val", (int32_t)v.temperature);
-    _updateNum(ValRespiration, "nRR.val", v.respirationRate);
+    _setNum(ValSpO2, v.spo2);
+    _setNum(ValBPM, v.bpm);
+    _setNum(ValPulseRate, v.pulseRate);
+    _setNum(ValHRV, v.hrVariance);
+    _setNum(ValTemperature, (int32_t)v.temperature);
+    _setNum(ValRespiration, v.respirationRate);
 }

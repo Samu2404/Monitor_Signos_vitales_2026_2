@@ -26,7 +26,7 @@ void EcgTask::begin() {
     attachInterrupt(digitalPinToInterrupt(isrPinLOPlus),  _onLeadOffChange, CHANGE);
     #endif
 
-    _hmi.configWaveform(GraphId, GraphChannel, GraphRateHz);   // Antes de crear la tarea: la gráfica ya está registrada cuando llega la primera muestra
+    _hmi.configWaveform(GraphId, GraphChannel, 0);   // Solo registra la escala; el ritmo lo da _graph. Antes de crear la tarea
     xTaskCreatePinnedToCore(_taskEntry, "EcgTask", TaskStackSize, this, TaskPriority, &_taskHandle, TaskCore);
 }
 
@@ -71,8 +71,10 @@ void EcgTask :: _taskLoop (){
             xSemaphoreGive(_mutex);
         }
 
-        _hmi.updateWaveform(GraphId, GraphChannel, sample);   // Misma muestra que usó el detector
-
+        if (_graph.push(sample)) {   // Misma muestra que usó el detector; mín y máx de cada ventana
+            _hmi.graphWaveform(GraphId, GraphChannel, _graph.first());
+            _hmi.graphWaveform(GraphId, GraphChannel, _graph.second());
+        }
         if (result.beat && result.bpm > 0.0f) {
             _hmi.writeBPM((int)result.bpm);
         }

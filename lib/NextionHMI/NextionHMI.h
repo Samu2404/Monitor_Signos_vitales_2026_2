@@ -6,10 +6,13 @@
 class NextionHMI {
 
     // Metodos publicos de la clase
-public: 
+public:
+
+    // Ids de las páginas en el editor del Nextion (posición en el panel Page)
+    enum Page : uint8_t { PageMain = 0, PageFullWf = 1, PageConfig = 2, PageCal = 3 };
 
 
-    /**  
+    /**
      * @brief Constructor de la clase NextionHMI
      * @param serial: Objeto de la clase puerto UART usado en la comunicacion
      */
@@ -106,14 +109,28 @@ public:
     void updateValues(int spo2, int bpm,int pulseRate, int hrVariance, float temperature, int respirationRate);
 
 
-    /** @brief Olvida los valores ya enviados para que el próximo updateValues() los reenvíe todos
-     * @note Llamar cuando la pantalla recarga la página y pierde sus valores (ver trigger de EasyNex)
+    /** @brief Olvida los valores ya enviados y reenvía todos los números a la pantalla
+     * @note Se hace solo al cargar cada página; llamarlo a mano solo si la pantalla se reinicia
      */
     void invalidateCache();
 
 
+    /** @brief Página que está mostrando el Nextion
+     * @note Cada página debe enviar en su Preinitialize Event: printh 23 02 50 + prints dp,1
+     */
+    Page currentPage() const { return (Page)_page; }
+
+
     // Metodos privados de la clase
 private:
+    friend void easyNexReadCustomCommand();   // EasyNex llama a esta función global con los comandos propios
+
+    static constexpr uint8_t AllWaves = 0;    // _fullWfId: no se sabe cuál es visible, se envían todas
+    static NextionHMI* _instance;             // Para que easyNexReadCustomCommand() llegue al objeto
+    uint8_t _fullWfId = AllWaves;             // Id de la gráfica visible en full_wf
+
+    void _onCustomCommand();                  // Maneja los comandos # <len> <grupo> que no son de EasyNex
+
 
     static constexpr uint8_t  MaxWaveforms   = 4;   // Gráficas simultáneas que se pueden registrar
     static constexpr uint32_t ValuesPeriodMs = 250; // Periodo mínimo entre revisiones de updateValues()
@@ -149,10 +166,22 @@ private:
         int respirationRate;
     };
 
-    WaveChannel* _findWaveform(uint8_t id, uint8_t channel);
-    void _writeNum(ValueId slot, const char* object, int32_t value);   // Envía y guarda en la caché
-    void _updateNum(ValueId slot, const char* object, int32_t value);  // Envía solo si cambió
+    static constexpr int32_t Unknown = INT32_MIN;   // Valor aún no enviado / no recibido
+    static constexpr int NoPageEvent = -1;          // Marca en EasyNex::currentPageId: no llegó ninguna página
+    static const char* const NumObjects[ValCount];  // Objeto del Nextion de cada ValueId
 
+    WaveChannel* _findWaveform(uint8_t id, uint8_t channel);
+    void _setNum(ValueId slot, int32_t value);   // Guarda el valor y lo envía si se ve y cambió
+    void _syncNum(ValueId slot);                 // Envía el valor guardado si la pantalla no lo tiene
+    void _invalidate();                          // Solo desde la tarea del HMI (o el constructor)
+    void _listen();                              // Lee los comandos que manda el Nextion
+    void _onPageLoaded(uint8_t page);
+    bool _showsNumbers() const { return _page == PageMain; }
+    bool _showsWave(uint8_t id) const {
+        if (_page == PageMain)   return true;
+        if (_page == PageFullWf) return _fullWfId == AllWaves || _fullWfId == id;
+        return false;
+    }
     static void _taskEntry(void* self);
     void _taskLoop();
     void _sendWave (uint8_t id, uint8_t channel, uint32_t value, uint32_t MapValue);
@@ -183,7 +212,9 @@ private:
     uint32_t _refreshRate = 60;
     WaveChannel _waves[MaxWaveforms];
     uint8_t _waveCount = 0;
-    int32_t _lastValues[ValCount];   // Último valor enviado de cada campo (INT32_MIN = desconocido)
+    int32_t _lastValues[ValCount];   // Último valor que tiene la pantalla (Unknown = desconocido)
+    int32_t _wanted[ValCount];       // Último valor pedido por las tareas (Unknown = ninguno)
     uint32_t _lastValuesTime = 0;
+    volatile uint8_t _page = PageMain;   // Al arrancar se asume main hasta que responda "sendme"
 };
 
