@@ -3,7 +3,7 @@
 
 // #define PPG_DEBUG 1
 
-PpgTask::PpgTask(NextionHMI& hmi): _hmi(hmi), _shared{}, _filter{} {
+PpgTask::PpgTask(NextionHMI& hmi): _hmi(hmi), _shared{}, _proc{} {
     
 }
 
@@ -20,7 +20,7 @@ void PpgTask::begin(SampleSource source) {
         return;
     }
 
-    ppg_filter_init(&_filter, sampleRateHz, PpgHpFc, PpgLpFc);   // Antes de crear la tarea
+    ppg_init(&_proc, ADCsampleRateHz);   // Filtro + detector. Antes de crear la tarea
 
     _hmi.configWaveform(GraphId, GraphChannel, 0);   // Solo registra la escala; el ritmo lo da _graph. Antes de crear la tarea
     xTaskCreatePinnedToCore(_taskEntry, "PpgTask", TaskStackSize, this, TaskPriority, &_taskHandle, TaskCore);
@@ -29,59 +29,6 @@ void PpgTask::begin(SampleSource source) {
 
 void PpgTask::_taskEntry(void* self) {
     static_cast <PpgTask*>(self)->_taskLoop();
-}
-
-bool PpgTask::_detectPeak(float x, uint32_t nowUs) {
-    PeakDetector& p = _pk;
-
-    p.amp *= PeakAmpDecay;
-    if (x > p.amp) p.amp = x;
-
-    float thr = p.amp * PeakThreshFrac;
-    bool valid = p.amp >= PeakMinAmp;
-
-    if (!p.above) {
-        if (valid && x > thr) {
-            p.above = true;
-            p.peakVal = x;
-            p.peakUs = nowUs;
-        }
-        return false;
-    }
-
-    if (x > p.peakVal) {
-        p.peakVal = x;
-        p.peakUs = nowUs;
-    }
-    if (x >= thr) {
-        return false;
-    }
-
-    // La señal bajó del umbral: el pulso terminó y su máximo está en peakUs
-    p.above = false;
-    if (p.lastBeatUs == 0) {
-        p.lastBeatUs = p.peakUs;
-        return false;
-    }
-
-    uint32_t rrMs = (p.peakUs - p.lastBeatUs) / 1000UL;
-    if (rrMs < PeakRefractoryMs) {
-        return false;                   // Rebote / pico secundario: se ignora sin mover lastBeatUs
-    }
-    p.lastBeatUs = p.peakUs;
-    if (rrMs > PeakMaxRrMs) {
-        p.rrN = 0;                      // Se perdieron latidos: reinicia el promedio
-        return false;
-    }
-
-    p.rr[p.rrIdx] = (float)rrMs;
-    p.rrIdx = (p.rrIdx + 1) % RrCount;
-    if (p.rrN < RrCount) p.rrN++;
-
-    float sum = 0.0f;
-    for (uint8_t i = 0; i < p.rrN; i++) sum += p.rr[i];
-    p.bpm = (uint16_t)lroundf(60000.0f * p.rrN / sum);
-    return true;
 }
 
 void PpgTask::_taskLoop (){
@@ -101,21 +48,20 @@ void PpgTask::_taskLoop (){
         // El sensor baja de voltaje con más sangre: se invierte para que el pico sistólico quede arriba
         uint16_t ppgSample = InvertSignal ? (uint16_t)(4095 - sample) : sample;
 
-        // Filtrado PPG (pasa-banda 0.5–4 Hz)
-        float filtered = ppg_filter_process(&_filter, (float)ppgSample);
+        // Filtro pasa-banda 0.5–4 Hz + detector de pulsos (incluye el timeout de 3 s)
+        PPG_Result r = ppg_process(&_proc, (float)ppgSample, now);
+        float filtered = r.filtered;
+        uint16_t pulseRate = (uint16_t)lroundf(r.bpm);
 
-        bool beat = _detectPeak(filtered, now);
-        if (_pk.lastBeatUs != 0 && (now - _pk.lastBeatUs) > PeakTimeoutMs * 1000UL) {
-            if (_pk.bpm != 0) {
-                _pk.bpm = 0;
-                _pk.rrN = 0;
-                _hmi.writePulseRate(0);
-            }
-        } else if (beat && _pk.bpm > 0) {
-            _hmi.writePulseRate(_pk.bpm);
+        if (r.beat && pulseRate > 0) {
+            _hmi.writePulseRate(pulseRate);
+            _shownPulseRate = pulseRate;
+        } else if (pulseRate == 0 && _shownPulseRate != 0) {
+            _hmi.writePulseRate(0);           // Se perdió el pulso: se avisa una sola vez
+            _shownPulseRate = 0;
         }
 
-        Snapshot snap{0, _pk.bpm, sample, filtered};   // SpO2 pendiente de implementar
+        Snapshot snap{0, pulseRate, sample, filtered};   // SpO2 pendiente de implementar
         if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {
             _shared= snap;
             xSemaphoreGive(_mutex);

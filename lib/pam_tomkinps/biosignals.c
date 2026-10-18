@@ -151,6 +151,106 @@ float ppg_filter_process(PpgFilter* p, float x) {
     return chain_process(&p->chain, x);
 }
 
+/* ======================= Procesador PPG (detector) ====================== */
+static void ppg_detector_clear(PpgProcessor* p) {
+    p->amp          = 0.0f;
+    p->above        = false;
+    p->peak_val     = 0.0f;
+    p->peak_us      = 0;
+    p->has_last     = false;
+    p->last_beat_us = 0;
+    memset(p->rr, 0, sizeof(p->rr));
+    p->rr_idx = 0;
+    p->rr_n   = 0;
+    p->bpm    = 0.0f;
+}
+
+void ppg_init(PpgProcessor* p, float fs) {
+    ppg_filter_init(&p->filter, fs, PPG_HP_FC, PPG_LP_FC);
+    p->min_amp   = PPG_PK_MIN_AMP;
+    p->amp_decay = expf(-1.0f / (PPG_PK_AMP_TAU_S * fs));
+    ppg_detector_clear(p);
+    p->initialized = true;
+}
+
+void ppg_reset(PpgProcessor* p) {
+    ppg_filter_reset(&p->filter);
+    ppg_detector_clear(p);
+}
+
+/* Se llama cuando la señal baja del umbral: decide si el pulso cuyo máximo
+ * está en peak_us se acepta. Devuelve true si se aceptó y hay nueva FC. */
+static bool ppg_accept_peak(PpgProcessor* p) {
+    if (!p->has_last) {
+        p->has_last     = true;              /* 1er pulso: solo marca la referencia */
+        p->last_beat_us = p->peak_us;
+        return false;
+    }
+
+    uint32_t rr_ms = (p->peak_us - p->last_beat_us) / 1000u;
+    if (rr_ms < PPG_PK_REFRACTORY_MS) {
+        return false;                        /* rebote / pico secundario: se ignora sin mover la referencia */
+    }
+    p->last_beat_us = p->peak_us;
+    if (rr_ms > PPG_PK_MAX_RR_MS) {
+        p->rr_n   = 0;                       /* se perdieron pulsos: reinicia el promedio */
+        p->rr_idx = 0;
+        return false;
+    }
+
+    p->rr[p->rr_idx] = (float)rr_ms;
+    p->rr_idx = (p->rr_idx + 1) % PPG_PK_RR_COUNT;
+    if (p->rr_n < PPG_PK_RR_COUNT) p->rr_n++;
+
+    float sum = 0.0f;
+    for (int i = 0; i < p->rr_n; i++) sum += p->rr[i];
+    p->bpm = 60000.0f * (float)p->rr_n / sum;
+    return true;
+}
+
+PPG_Result ppg_process(PpgProcessor* p, float sample, uint32_t t_us) {
+    PPG_Result r;
+    memset(&r, 0, sizeof(r));
+
+    float x = ppg_filter_process(&p->filter, sample);
+    r.filtered = x;
+
+    p->amp *= p->amp_decay;
+    if (x > p->amp) p->amp = x;
+    float thr = p->amp * PPG_PK_THRESH_FRAC;
+    r.threshold = thr;
+
+    if (!p->above) {
+        if (p->amp >= p->min_amp && x > thr) {   /* empieza un pulso */
+            p->above    = true;
+            p->peak_val = x;
+            p->peak_us  = t_us;
+        }
+    } else {
+        if (x > p->peak_val) {                   /* sigue el máximo */
+            p->peak_val = x;
+            p->peak_us  = t_us;
+        }
+        if (x < thr) {                           /* el pulso terminó */
+            p->above = false;
+            if (ppg_accept_peak(p)) {
+                r.beat    = true;
+                r.peak_us = p->peak_us;
+            }
+        }
+    }
+
+    /* Sin pulsos durante el timeout: la FC deja de ser válida */
+    if (p->has_last && (t_us - p->last_beat_us) > PPG_PK_TIMEOUT_MS * 1000u) {
+        p->bpm    = 0.0f;
+        p->rr_n   = 0;
+        p->rr_idx = 0;
+    }
+
+    r.bpm = p->bpm;
+    return r;
+}
+
 void mwi_init(MovingIntegrator* m, int window) {
     if (window < 1)            window = 1;
     if (window > BIO_MWI_MAX)  window = BIO_MWI_MAX;

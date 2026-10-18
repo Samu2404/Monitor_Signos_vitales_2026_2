@@ -65,6 +65,62 @@ void  ppg_filter_reset  (PpgFilter* p);   /* limpia estados, conserva el diseño
 float ppg_filter_process(PpgFilter* p, float x);
 
 
+/* ================= Procesador PPG: filtro + detector de pulsos ============
+ * PpgFilter (pasa-banda 0.5–4 Hz) seguido de un detector de picos con umbral
+ * adaptativo sobre la señal filtrada:
+ *  - umbral = PPG_PK_THRESH_FRAC de una amplitud estimada que decae;
+ *  - mientras la señal está sobre el umbral se sigue su máximo;
+ *  - el pulso se acepta al bajar del umbral; su instante es el del máximo;
+ *  - FC = promedio de los últimos PPG_PK_RR_COUNT intervalos;
+ *  - sin pulsos durante PPG_PK_TIMEOUT_MS la FC vuelve a 0.
+ * Igual que PanTompkins: no usa malloc y todo el estado vive en la estructura. */
+#define PPG_PK_AMP_TAU_S      4.0f   /* constante de caída de la amplitud [s] (0.999/muestra a 250 Hz) */
+#define PPG_PK_THRESH_FRAC    0.5f   /* umbral = fracción de la amplitud estimada */
+#define PPG_PK_MIN_AMP        20.0f  /* amplitud mínima por defecto [cuentas]; evita disparar con ruido */
+#define PPG_PK_REFRACTORY_MS  300u   /* RR mínimo: máx. ~200 lpm */
+#define PPG_PK_MAX_RR_MS      2000u  /* RR máximo: mín. 30 lpm; si se supera se reinicia el promedio */
+#define PPG_PK_TIMEOUT_MS     3000u  /* sin pulsos este tiempo -> bpm = 0 */
+#define PPG_PK_RR_COUNT       4      /* intervalos RR promediados */
+
+typedef struct {
+    float    filtered;   /* muestra tras el pasa-banda (centrada en 0)            */
+    float    threshold;  /* umbral actual del detector                            */
+    bool     beat;       /* true SOLO en la muestra en que se acepta un pulso     */
+    uint32_t peak_us;    /* instante del máximo del pulso aceptado (válido si beat) */
+    float    bpm;        /* frecuencia de pulso (0 = sin estimación)              */
+} PPG_Result;
+
+typedef struct {
+    PpgFilter filter;
+    float    min_amp;        /* amplitud mínima para aceptar pulsos; se puede ajustar tras ppg_init */
+    float    amp_decay;      /* caída por muestra de 'amp', calculada con fs */
+
+    /* Detector */
+    float    amp;            /* amplitud pico estimada */
+    bool     above;          /* ¿la señal está sobre el umbral? */
+    float    peak_val;       /* máximo del pulso en curso */
+    uint32_t peak_us;        /* instante de ese máximo */
+    bool     has_last;       /* ¿hay un pulso anterior aceptado? */
+    uint32_t last_beat_us;   /* instante del último pulso aceptado */
+
+    /* Frecuencia de pulso */
+    float    rr[PPG_PK_RR_COUNT];   /* últimos RR [ms] */
+    int      rr_idx, rr_n;
+    float    bpm;
+    bool     initialized;
+} PpgProcessor;
+
+/* Inicializa filtro y detector para una frecuencia de muestreo dada. */
+void       ppg_init   (PpgProcessor* p, float fs);
+
+/* Reinicia filtro y detector; conserva fs y min_amp. */
+void       ppg_reset  (PpgProcessor* p);
+
+/* Procesa UNA muestra cruda (no filtrada). t_us: instante de la muestra [us];
+ * puede venir de micros() o de un contador de muestras (n * 1e6 / fs). */
+PPG_Result ppg_process(PpgProcessor* p, float sample, uint32_t t_us);
+
+
 #define BIO_MWI_MAX 128           /* soporta hasta 256 ms @ 500 Hz */
 typedef struct {
     float buf[BIO_MWI_MAX];
