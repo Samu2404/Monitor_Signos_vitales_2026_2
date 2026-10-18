@@ -51,10 +51,17 @@ void BpTask::onBeat() {
     }
     _beats++;
 
-    Snapshot snap{r.ptt_avg, r.pir_avg, r.sbp, r.dbp, r.calibrating, r.calibrated, _beats};
+        Snapshot snap{r.ptt_avg, r.pir_avg, r.sbp, r.dbp, r.calibrating, r.calibrated, _beats, millis()};
     if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {
         _shared = snap;
+        if (r.calibrated) {
+            _shown = true;
+        }
         xSemaphoreGive(_mutex);
+    }
+
+    if (r.calibrated) {
+        _hmi.writeBloodPressure((int)lroundf(r.sbp), (int)lroundf(r.dbp));
     }
 }
 
@@ -80,4 +87,21 @@ BpTask::Snapshot BpTask::getSnapshot() {
         xSemaphoreGive(_mutex);
     }
     return snap;
+}
+
+void BpTask::checkTimeout() {
+    if (_mutex == nullptr) {
+        return;
+    }
+    bool clear = false;
+    if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {
+        if (_shown && (millis() - _shared.lastBeatMs) > StaleMs) {
+            _shown = false;                      // Se borra una sola vez
+            clear = true;
+        }
+        xSemaphoreGive(_mutex);
+    }
+    if (clear) {
+        _hmi.writeBloodPressure(0, 0);           // 0 = sin dato (el objeto numérico no admite "--")
+    }
 }

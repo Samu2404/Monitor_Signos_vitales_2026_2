@@ -12,7 +12,9 @@ const char* const NextionHMI::NumObjects[ValCount] = {
     "nPR.val",
     "nHRV.val",
     "nT.val",
-    "nRR.val"
+    "nRR.val",
+    "nSistolica.val",
+    "nDiastolica.val"
 };
 
 NextionHMI* NextionHMI::_instance = nullptr;
@@ -108,6 +110,10 @@ void NextionHMI::writeRespirationRate(int respirationRate) {
     _enqueueNum(ValRespiration, respirationRate);
 }
 
+void NextionHMI::writeBloodPressure(int sistolica, int diastolica) {
+    _enqueueNum(ValSistolica, sistolica);
+    _enqueueNum(ValDiastolica, diastolica);
+}
 
 void NextionHMI::updateValues(int spo2, int bpm, int pulseRate, int hrVariance, float temperature, int respirationRate) {
     if (_vitalsBox == nullptr) {

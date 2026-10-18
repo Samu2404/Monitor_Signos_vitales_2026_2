@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include "biosignals.h"
+#include "NextionHMI.h"
 
 // Presión arterial por PTT + PIR (algoritmo del PDF, en biosignals: bp_*).
 // No tiene tarea propia: la alimenta el productor de las muestras (el sink de AfeTask),
@@ -15,9 +16,10 @@ public:
         bool     calibrating;
         bool     calibrated;
         uint32_t beats;        // Latidos aceptados desde el inicio
+        uint32_t lastBeatMs;
     };
 
-    BpTask() = default;
+    BpTask(NextionHMI& hmi) : _hmi(hmi) {}
     BpTask(const BpTask&) = delete;              // _bp es grande (~12 KB): nunca copiarlo
     BpTask& operator=(const BpTask&) = delete;
 
@@ -38,13 +40,26 @@ public:
     /** @brief Pide calibrar con la medida del tensiómetro. Seguro desde otra tarea (p. ej. loop) */
     void startCalibration(float sbp, float dbp);
 
+    /** @brief Si no hay latidos aceptados en StaleMs, borra la presión de la pantalla.
+     *  @note Llamarlo periódicamente desde loop() (BpTask no tiene tarea propia)
+     */
+    void checkTimeout();
+
+
     Snapshot getSnapshot();
 
 private:
+    static constexpr uint32_t StaleMs = 5000;   // ms sin latidos aceptados para borrar la presión
+
+
+
     BpEstimator _bp;                 // Solo lo usa el productor (pushEcg/pushPpg/onBeat)
+    NextionHMI& _hmi;                
     SemaphoreHandle_t _mutex = nullptr;
     Snapshot _shared{};              // Último resultado publicado; protegido por _mutex
     bool  _calRequest = false;       // Pedido de calibración pendiente; protegido por _mutex
     float _calSbp = 0.0f, _calDbp = 0.0f;
     uint32_t _beats = 0;
+    bool _shown= false;
+
 };

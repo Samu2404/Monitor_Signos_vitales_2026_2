@@ -73,6 +73,11 @@ public:
      */
     void writeRespirationRate(int respirationRate); 
 
+    /** @brief Escribe el valor de la presión sistólica en la pantalla
+     * @param sistolica: Valor de la presión sistólica a escribir 
+     * @param diastolica: Valor de la presión diastólica a escribir
+     */
+    void writeBloodPressure(int sistolica, int diastolica);
 
     /** @brief Registra una gráfica con su propia tasa de refresco
      * @param id: ID del objeto en la pantalla
@@ -104,6 +109,8 @@ public:
      * @param hrVariance: Valor de la variabilidad de la frecuencia cardíaca a actualizar
      * @param temperature: Valor de la temperatura a actualizar
      * @param respirationRate: Valor de la frecuencia respiratoria a actualizar
+     * @param sistolica: Valor de la presión sistólica a actualizar
+     * @param diastolica: Valor de la presión diastólica a actualizar
      * @note Se ejecuta como máximo cada ValuesPeriodMs
      */
     void updateValues(int spo2, int bpm,int pulseRate, int hrVariance, float temperature, int respirationRate);
@@ -137,7 +144,7 @@ private:
     static constexpr uint32_t DefaultMapValue = 4096; // MapValue por defecto (ADC de 12 bits)
 
     // Identificador de cada valor numérico dentro de la caché
-    enum ValueId : uint8_t { ValSpO2, ValBPM, ValPulseRate, ValHRV, ValTemperature, ValRespiration, ValCount };
+    enum ValueId : uint8_t { ValSpO2, ValBPM, ValPulseRate, ValHRV, ValTemperature,ValSistolica, ValDiastolica, ValRespiration, ValCount };
 
     // Estado de cada gráfica: su periodo y cuándo se envió su último punto
     struct WaveChannel {

@@ -10,14 +10,33 @@ class PpgTask {
         struct Snapshot {
             uint16_t spo2;
             uint16_t pulseRate;
-            uint16_t sample;      // muestra cruda del ADC
+            int32_t  sample;      // muestra que entró a process() (ADC 0..4095 o AFE con signo)
             float    filtered;    // muestra tras el filtro PPG (centrada en 0)
         };
 
         using SampleSource = uint16_t (*)();   // Devuelve una muestra 0..4095 (p. ej. señal simulada)
 
         PpgTask(NextionHMI& hmi);
-        void begin(SampleSource source = nullptr);   // nullptr = leer el ADC (analogPin)
+
+        /**
+         * @brief Modo ADC: crea una tarea propia que muestrea cada SamplePeriodMs
+         * @param source nullptr = leer el ADC (analogPin); si no, esta función (simulación)
+         */
+        void begin(SampleSource source = nullptr);
+
+        /**
+         * @brief Modo externo (AFE): no crea tarea; las muestras llegan por process()
+         * @param fs Frecuencia de muestreo de las muestras que se entregarán [Hz]
+         */
+        void beginExternal(float fs);
+
+        /**
+         * @brief Procesa una muestra: filtro + detector, snapshot, gráfica y HMI
+         * @param sample Muestra ya orientada (sístole hacia arriba)
+         * @param tUs    Instante de la muestra [us]. 0 = calcularlo contando muestras (fs exacta)
+         */
+        void process(int32_t sample, uint32_t tUs = 0);
+
         Snapshot getSnapshot();
 
     private:
@@ -30,7 +49,7 @@ class PpgTask {
         static constexpr uint8_t GraphChannel= 0;
 
         // --- Señal y gráfica (el filtro y el detector viven en PpgProcessor, biosignals) ---
-        static constexpr bool  InvertSignal  = false;  // true = invierte la muestra (4095 - x) si el sensor baja de voltaje en sístole
+        static constexpr bool  InvertSignal  = false;  // Solo modo ADC: true = invierte (4095 - x) si el sensor baja de voltaje en sístole
         static constexpr bool  GraphFiltered = false;  // false = graficar la señal cruda; true = la filtrada
         static constexpr float GraphGain   = 1.0f;   // escala de la señal filtrada en la gráfica
         static constexpr int32_t GraphOffset = 2048; // la salida filtrada es bipolar: se centra a media escala
@@ -40,15 +59,17 @@ class PpgTask {
         static constexpr uint8_t TaskCore= 0;     // Core distinto al de NextionHMI y loop()
         
         NextionHMI& _hmi;
-        WaveDecimator _graph{GraphDecimation};   // Solo lo usa _taskLoop
+        WaveDecimator _graph{GraphDecimation};   // Solo lo usa process()
         Snapshot _shared;                     // Último resultado publicado; protegido por _mutex
         SemaphoreHandle_t _mutex = nullptr;
         TaskHandle_t _taskHandle = nullptr;
-        PpgProcessor _proc;                   // Filtro + detector de pulsos. Solo lo usa _taskLoop (no requiere mutex)
+        PpgProcessor _proc;                   // Filtro + detector de pulsos. Solo lo usa process() (no requiere mutex)
         uint16_t _shownPulseRate = 0;         // Último valor enviado al HMI (para mandar el 0 una sola vez)
         SampleSource _source = nullptr;       // Fuente de muestras alternativa al ADC
+        float    _fs = ADCsampleRateHz;       // Frecuencia de muestreo del modo activo
+        uint32_t _n = 0;                      // Muestras procesadas (base de tiempo cuando tUs = 0)
 
-
+        bool _init(float fs);                 // Lo común a ambos modos
         static void _taskEntry(void* self);
         void _taskLoop();
 };
