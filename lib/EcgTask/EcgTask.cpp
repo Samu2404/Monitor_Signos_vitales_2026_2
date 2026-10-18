@@ -46,15 +46,15 @@ void EcgTask:: beginExternal(float fs){
         _init(fs);
 }
 
-void EcgTask:: process (int32_t sample, uint32_t tUs){
+bool EcgTask:: process (int32_t sample, uint32_t tUs){
     if (_mutex == nullptr) {
-        return;
+        return false;
     }
 
     PT_Result result= tUs ? pt_process_t(&_pt, (float) sample, tUs) :
                         pt_process(&_pt, (float) sample);
     
-    Snapshot snap {result.bpm, pt_beats(&_pt), sample};
+    Snapshot snap {result.bpm, pt_beats(&_pt),sample};
 
     if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {
         _shared= snap;
@@ -68,6 +68,7 @@ void EcgTask:: process (int32_t sample, uint32_t tUs){
     if (result.beat && result.bpm > 0.0f) {
         _hmi.writeBPM((int)result.bpm);
     }
+    return result.beat;
 }
 
 

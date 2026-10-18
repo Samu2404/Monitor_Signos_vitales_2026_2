@@ -24,7 +24,7 @@
 
         private:
             static constexpr uint32_t PollPeriodMs = 10; // Periodo de muestreo de la tarea
-            static constexpr size_t   TaskStackSize = 4096;
+            static constexpr size_t   TaskStackSize = 6144;
             static constexpr uint8_t  TaskPriority  = 2;      // Igual que EcgTask/PpgTask
             static constexpr uint8_t  TaskCore      = 0;      // Core distinto al de NextionHMI y loop()
 
@@ -39,8 +39,6 @@
             ByteSource   _source = nullptr;
             volatile uint32_t _frames = 0;                    
             TaskHandle_t _taskHandle = nullptr;
-
-
 
     };
             

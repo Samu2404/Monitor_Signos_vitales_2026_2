@@ -1,4 +1,4 @@
-#include "afe4950_task.h"
+#include "afe4950_driver.h"
 
 bool AfeSensor::begin(uint8_t sclkPin, uint8_t misoPin, uint8_t mosiPin, uint8_t csPin, uint8_t resetPin, uint8_t rdyPin) {
     if (_ready) {

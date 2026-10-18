@@ -32,7 +32,7 @@ public:
     void begin();
     Snapshot  getSnapshot();
     void beginExternal (float fs);
-    void process (int32_t sample, uint32_t tUs = 0);
+    bool process (int32_t sample, uint32_t tUs = 0);
 
 
 private:
