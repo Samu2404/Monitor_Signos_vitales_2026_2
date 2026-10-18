@@ -17,7 +17,7 @@ bool EcgTask::_init(float fs) {
 
 void EcgTask::begin() {
 
-    if (_mutex == nullptr) {
+    if (_mutex != nullptr) {
        return;
     }
     analogReadResolution(12); // Configura la resolución de lectura analógica a 12 bits

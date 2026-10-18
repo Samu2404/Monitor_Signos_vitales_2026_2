@@ -15,7 +15,7 @@ public:
     struct Snapshot {
         float bpm ;
         uint32_t beats;
-        uint32_t sample;
+        int32_t sample;
     };
 
     /**

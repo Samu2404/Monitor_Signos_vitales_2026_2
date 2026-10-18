@@ -144,7 +144,7 @@ private:
     static constexpr uint32_t DefaultMapValue = 4096; // MapValue por defecto (ADC de 12 bits)
 
     // Identificador de cada valor numérico dentro de la caché
-    enum ValueId : uint8_t { ValSpO2, ValBPM, ValPulseRate, ValHRV, ValTemperature,ValSistolica, ValDiastolica, ValRespiration, ValCount };
+    enum ValueId : uint8_t { ValSpO2, ValBPM, ValPulseRate, ValHRV, ValTemperature, ValRespiration, ValSistolica, ValDiastolica,ValCount };
 
     // Estado de cada gráfica: su periodo y cuándo se envió su último punto
     struct WaveChannel {
