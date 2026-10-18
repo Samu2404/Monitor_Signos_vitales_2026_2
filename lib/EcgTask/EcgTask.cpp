@@ -16,9 +16,7 @@ bool EcgTask::_init(float fs) {
 }
 
 void EcgTask::begin() {
-    if (_taskHandle != nullptr) {
-        return; // La tarea ya está en ejecución
-    }
+
     if (_mutex == nullptr) {
        return;
     }
@@ -28,11 +26,7 @@ void EcgTask::begin() {
     if (!_init(ADCsampleRateHz)) {
         return; 
     }
-    pt_init(&_pt, ADCsampleRateHz);
-    _mutex = xSemaphoreCreateMutex();
-    if (_mutex == nullptr) {
-        return;
-    }
+
     #if ENABLE_LEAD_OFF_DETECT
     pinMode(isrPinLOMinus, INPUT_PULLUP);
     pinMode(isrPinLOPlus, INPUT_PULLUP);
@@ -42,12 +36,11 @@ void EcgTask::begin() {
     attachInterrupt(digitalPinToInterrupt(isrPinLOPlus),  _onLeadOffChange, CHANGE);
     #endif
 
-    _hmi.configWaveform(GraphId, GraphChannel, 0);   // Solo registra la escala; el ritmo lo da _graph. Antes de crear la tarea
     xTaskCreatePinnedToCore(_taskEntry, "EcgTask", TaskStackSize, this, TaskPriority, &_taskHandle, TaskCore);
 }
 
 void EcgTask:: beginExternal(float fs){
-        if (_mutex == nullptr) {
+        if (_mutex != nullptr) {
         return;
         }
         _init(fs);
@@ -112,34 +105,14 @@ void EcgTask :: _taskLoop (){
         #endif
         process (sample, now);
         
-        PT_Result result= pt_process_t(&_pt,(float) sample, now);
-        Snapshot snap{result.bpm, pt_beats(&_pt), sample};
-        if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {
-            _shared= snap;
-            xSemaphoreGive(_mutex);
-        }
-
-        if (_graph.push(sample)) {   // Misma muestra que usó el detector; mín y máx de cada ventana
-            _hmi.graphWaveform(GraphId, GraphChannel, _graph.first());
-            _hmi.graphWaveform(GraphId, GraphChannel, _graph.second());
-        }
-        if (result.beat && result.bpm > 0.0f) {
-            _hmi.writeBPM((int)result.bpm);
-        }
-        
         #ifdef DEBUG
         uint32_t dt = now - lastUs;
         lastUs = now;
         if (dt < dtMin) dtMin = dt;
         if (dt > dtMax) dtMax = dt;
-        if (result.beat) {
-            Serial.printf("LATIDO #%lu  bpm=%.1f  inst=%.1f\n",
-                          (unsigned long)pt_beats(&_pt), result.bpm, result.bpm_inst);
-        }
-        if (++count >= 333) {                    // ~1 vez por segundo
-            Serial.printf("dt %lu..%lu us | raw=%u integ=%.0f umbral=%.0f bpm=%.1f\n",
-                          (unsigned long)dtMin, (unsigned long)dtMax,
-                          sample, result.integrated, result.threshold, result.bpm);
+        if (++count >= 500) {                    // ~1 vez por segundo a 500 Hz
+            Serial.printf("dt %lu..%lu us | raw=%u bpm=%.1f\n",
+                          (unsigned long)dtMin, (unsigned long)dtMax, sample, getSnapshot().bpm);
             dtMin = UINT32_MAX; dtMax = 0; count = 0;
         }
         #endif
