@@ -25,7 +25,7 @@ void AfeSensor::stop() {
     _afe.disableCapture();
 }
 
-void AfeSensor :: readByte (uint8_t& b){
+bool AfeSensor :: readByte (uint8_t& b){
     if (!_ready) {
         return false; // no se ha inicializado el AFE4950
     }

@@ -26,7 +26,7 @@ bool AfeParser :: push (uint8_t byte, Frame& out){
     }
     _n=0;
 
-    if (!tag== TagHeader) {
+    if (tag != TagSample) {
         return false; //  Las cabezeras no cambian de fase
     }
 
@@ -35,6 +35,7 @@ bool AfeParser :: push (uint8_t byte, Frame& out){
     
     if (_phase < 2){
         _ecg[_phase++] = value;
+        return false; 
     }
 
     out.ecg[0] = _ecg[0];
