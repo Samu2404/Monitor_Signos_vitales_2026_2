@@ -235,6 +235,79 @@ float pt_bpm_inst(const PanTompkins* pt);   /* FC del último intervalo  [bpm] *
 float pt_rr_ms(const PanTompkins* pt);      /* intervalo RR promedio     [ms] */
 uint32_t pt_beats(const PanTompkins* pt);   /* latidos detectados             */
 
+
+/* ============ Presión arterial por PTT + PIR (Ding et al., 2017) ============
+ * Guarda los últimos ~4 s de ECG y PPG crudos y, cada vez que el detector de
+ * QRS avisa un latido, calcula el latido ANTERIOR (necesita el R siguiente):
+ *  1. Pico R real: máximo del ECG en [aviso - 400 ms, aviso], sin acercarse a
+ *     menos de 250 ms del R anterior (corrige el retardo del Pan-Tompkins).
+ *  2. PTT: de R al punto de subida más rápida del pulso en [R+100, R+500] ms.
+ *  3. PIR = IH / IL: luz máxima entre R y ese punto / luz mínima en los 300 ms
+ *     siguientes (el PPG crudo es luz: baja cuando la arteria se llena).
+ *  4. Revisión (rangos y artefactos), promedio de BP_NPROM latidos.
+ *  5. Calibración con un tensiómetro (SBP0/DBP0 -> PTT0/PIR0) y modelo:
+ *       MBP = MBP0·PIR0/PIR,  PP = PP0·(PIR/PIR0)·(PTT0/PTT)²
+ *       SBP = MBP + 2·PP/3,   DBP = MBP − PP/3
+ * ECG y PPG deben compartir reloj: la muestra n de PPG es simultánea a la
+ * muestra n·fs_ecg/fs_ppg de ECG (así llegan las tramas del AFE4950). */
+#define BP_ECG_BUF        2048     /* ~4 s @ 500 Hz */
+#define BP_PPG_BUF        1024     /* ~4 s @ 250 Hz */
+#define BP_NPROM          8        /* latidos promediados */
+#define BP_NCAL           30       /* latidos para calibrar */
+#define BP_PTT_MIN_MS     150.0f
+#define BP_PTT_MAX_MS     450.0f
+#define BP_PIR_MAX        1.3f
+#define BP_ARTIFACT_FRAC  0.2f     /* salto máximo del PTT respecto al promedio */
+
+typedef struct {
+    bool  beat;           /* true si en este aviso se aceptó un latido (los demás campos son válidos) */
+    float ptt_ms;         /* PTT del latido */
+    float pir;            /* PIR del latido (1.0 si no se usa PIR) */
+    float ptt_avg;        /* promedio de los últimos BP_NPROM latidos aceptados */
+    float pir_avg;
+    bool  calibrating;    /* acumulando latidos de calibración */
+    bool  calibrated;     /* hay PTT0/PIR0: sbp y dbp son válidos */
+    bool  cal_done;       /* true SOLO en el latido que termina la calibración */
+    float sbp, dbp;       /* presión estimada [mmHg] (si calibrated) */
+} BP_Result;
+
+typedef struct {
+    float fs_ecg, fs_ppg;
+    int   ecg_sign;       /* +1, o -1 si la onda R sale hacia abajo */
+    int   ppg_sign;       /* +1 si el PPG crudo es luz (baja con el pulso), -1 si es volumen */
+    bool  use_pir;        /* false: solo PTT (pir = 1) */
+
+    int32_t  ecg[BP_ECG_BUF];
+    int32_t  ppg[BP_PPG_BUF];
+    uint32_t n_ecg, n_ppg;        /* muestras recibidas de cada señal */
+
+    bool     has_r;               /* ¿hay un R anterior? */
+    uint32_t r_prev;              /* índice ECG del R anterior */
+
+    float ptt_hist[BP_NPROM], pir_hist[BP_NPROM];
+    int   n_prom, i_prom;
+    float ptt_avg, pir_avg;
+
+    bool  calibrating, calibrated;
+    float sbp0, dbp0, ptt0, pir0;
+    float sum_ptt, sum_pir;
+    int   n_cal;
+} BpEstimator;
+
+void bp_init(BpEstimator* b, float fs_ecg, float fs_ppg);
+void bp_push_ecg(BpEstimator* b, int32_t sample);   /* una muestra cruda de ECG */
+void bp_push_ppg(BpEstimator* b, int32_t sample);   /* una muestra cruda de PPG (luz, con DC) */
+
+/* Llamar cuando el detector de QRS marca latido en la ÚLTIMA muestra de ECG
+ * entregada con bp_push_ecg. Procesa el latido anterior. */
+BP_Result bp_on_beat(BpEstimator* b);
+
+/* Inicia la calibración con la medida del tensiómetro (paciente quieto ~30 s). */
+void bp_start_calibration(BpEstimator* b, float sbp, float dbp);
+
+/* Modelo de presión con la calibración actual (útil para probarlo aislado). */
+void bp_model(const BpEstimator* b, float ptt_ms, float pir, float* sbp, float* dbp);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
