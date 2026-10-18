@@ -271,6 +271,8 @@ void NextionHMI::_handle(const msg& m) {
     }
 }
 
+
+
 void NextionHMI::_enqueueNum(ValueId slot, int32_t value) {
     if (_queue == nullptr) {
         return;

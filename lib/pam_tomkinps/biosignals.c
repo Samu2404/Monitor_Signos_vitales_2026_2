@@ -465,3 +465,7 @@ float pt_bpm_inst(const PanTompkins* pt) { return pt->bpm_inst; }
 uint32_t pt_beats(const PanTompkins* pt) { return pt->beats; }
 
 float pt_rr_ms(const PanTompkins* pt) { return pt->rr_med; }
+
+// ====================== Calculo de Presion arterial a partir de PTT ===========================
+
+
