@@ -5,14 +5,30 @@ volatile bool EcgTask::s_leadOffFlag = false;
 EcgTask::EcgTask(NextionHMI& hmi) : _hmi(hmi), _shared{} {
 }
 
+bool EcgTask::_init(float fs) {
+    pt_init(&_pt, fs);
+    _mutex = xSemaphoreCreateMutex();
+    if (_mutex == nullptr) {
+        return false;
+    }
+    _hmi.configWaveform(GraphId, GraphChannel, 0);  
+    return true;
+}
+
 void EcgTask::begin() {
     if (_taskHandle != nullptr) {
         return; // La tarea ya está en ejecución
     }
+    if (_mutex == nullptr) {
+       return;
+    }
     analogReadResolution(12); // Configura la resolución de lectura analógica a 12 bits
     analogSetAttenuation(ADC_11db); // Configura la atenuación del ADC a 11 dB
 
-    pt_init(&_pt, sampleRateHz);
+    if (!_init(ADCsampleRateHz)) {
+        return; 
+    }
+    pt_init(&_pt, ADCsampleRateHz);
     _mutex = xSemaphoreCreateMutex();
     if (_mutex == nullptr) {
         return;
@@ -30,6 +46,38 @@ void EcgTask::begin() {
     xTaskCreatePinnedToCore(_taskEntry, "EcgTask", TaskStackSize, this, TaskPriority, &_taskHandle, TaskCore);
 }
 
+void EcgTask:: beginExternal(float fs){
+        if (_mutex == nullptr) {
+        return;
+        }
+        _init(fs);
+}
+
+void EcgTask:: process (int32_t sample, uint32_t tUs){
+    if (_mutex == nullptr) {
+        return;
+    }
+
+    PT_Result result= tUs ? pt_process_t(&_pt, (float) sample, tUs) :
+                        pt_process(&_pt, (float) sample);
+    
+    Snapshot snap {result.bpm, pt_beats(&_pt), sample};
+
+    if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {
+        _shared= snap;
+        xSemaphoreGive(_mutex);
+    }
+
+    if (_graph.push((uint32_t) sample)) {   
+        _hmi.graphWaveform(GraphId, GraphChannel, _graph.first());
+        _hmi.graphWaveform(GraphId, GraphChannel, _graph.second());
+    }
+    if (result.beat && result.bpm > 0.0f) {
+        _hmi.writeBPM((int)result.bpm);
+    }
+}
+
+
 void  EcgTask:: _taskEntry(void* self) {
     static_cast <EcgTask*>(self)->_taskLoop();
 }
@@ -39,7 +87,6 @@ void EcgTask :: _taskLoop (){
         Serial.println("EcgTask: Iniciando bucle de muestreo");
             uint32_t lastUs= micros();
             uint32_t dtMin= UINT32_MAX, dtMax= 0, count = 0;
-
     #endif
 
     TickType_t lastWake = xTaskGetTickCount();
@@ -63,7 +110,8 @@ void EcgTask :: _taskLoop (){
         continue;
         }
         #endif
-
+        process (sample, now);
+        
         PT_Result result= pt_process_t(&_pt,(float) sample, now);
         Snapshot snap{result.bpm, pt_beats(&_pt), sample};
         if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {

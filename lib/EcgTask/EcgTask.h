@@ -15,7 +15,7 @@ public:
     struct Snapshot {
         float bpm ;
         uint32_t beats;
-        uint16_t sample;
+        uint32_t sample;
     };
 
     /**
@@ -31,16 +31,18 @@ public:
      */
     void begin();
     Snapshot  getSnapshot();
+    void beginExternal (float fs);
+    void process (int32_t sample, uint32_t tUs = 0);
+
 
 private:
     
     static constexpr uint8_t analogPin= 34;
-    static constexpr float sampleRateHz = 1000.0f/2.0f;
     static constexpr uint16_t GraphDecimation = 4;   // Muestras por ventana: 2·333/13 ≈ 51 puntos/s en la gráfica
     static constexpr uint8_t GraphId= 1;
     static constexpr uint8_t GraphChannel= 0;
-    static constexpr uint8_t SamplePeriodMs= 3;
-    
+    static constexpr uint8_t SamplePeriodMs= 2;
+    static constexpr float ADCsampleRateHz = 1000.0f/SamplePeriodMs; 
     static constexpr size_t TaskStackSize= 4096;
     static constexpr uint8_t TaskPriority= 2;   // Mayor que la tarea del HMI (1) para no perder el ritmo de 3 ms
     static constexpr uint8_t TaskCore= 0;       // Core distinto al de NextionHMI y loop()
@@ -61,5 +63,6 @@ private:
     static constexpr uint8_t isrPinLOPlus= 16;   // LOD+ del AD8232 (electrodo izquierdo)
     static void IRAM_ATTR _onLeadOffChange();    // ISR: código mínimo
     bool _leadOffState= false;                   // Estado actual de los electrodos; lo lee _electrodeCheck()   
+    bool _init (float fs);                       
     void _electrodeCheck();                      // Llamada desde _taskLoop(); 
 };
