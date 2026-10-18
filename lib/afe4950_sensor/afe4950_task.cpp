@@ -1,33 +1,48 @@
 #include "afe4950_task.h"
 
-bool AfeSensor::begin(uint8_t sclkPin, uint8_t misoPin, uint8_t mosiPin, uint8_t csPin, uint8_t resetPin, uint8_t rdyPin) {
-    if (_ready) {
-        return true; // ya se inicializo el AFE4950
+AfeTask :: AfeTask (AfeSensor& afe) : _afe(afe) {
+}
+
+void AfeTask :: begin (FrameSink sink, void* ctx, ByteSource source) {
+    if (_taskHandle != nullptr) {
+        return;
     }
 
-    SPI.begin(sclkPin, misoPin, mosiPin, csPin);
-    _ready = _afe.configure(sclkPin, misoPin, mosiPin, csPin, resetPin, rdyPin);
-    return _ready;
+    _sink = sink;
+    _ctx = ctx;
+    _source = source;
+    _parser.reset();
+
+    if (_source == nullptr) {
+        _afe.start();
+    };
+
+    xTaskCreatePinnedToCore(_taskEntry, "AfeTask", TaskStackSize, this, TaskPriority, &_taskHandle, TaskCore);
+}
+
+uint32_t AfeTask :: frames() {
+    return _frames;
 }
 
 
-void AfeSensor::start() {
-    if (!_ready) {
-        return; // no se ha inicializado el AFE4950
-    }
-    _afe.enableCapture();
+void AfeTask :: _taskEntry (void* self) {
+    static_cast<AfeTask*>(self)->_taskLoop();
 }
 
-void AfeSensor::stop() {
-    if (!_ready) {
-        return; // no se ha inicializado el AFE4950
-    }
-    _afe.disableCapture();
-}
+void AfeTask :: _taskLoop(){
+    AfeParser::Frame f;
+    uint8_t b;
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    for (;;) {
+        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(PollPeriodMs));
 
-bool AfeSensor :: readByte (uint8_t& b){
-    if (!_ready) {
-        return false; // no se ha inicializado el AFE4950
+        while (_source ? _source(b) : _afe.readByte(b)) {
+            if (_parser.push(b, f)) {
+                _frames++;
+                if (_sink) {
+                    _sink(f, _ctx);
+                }
+            }
+        }
     }
-    return _afe.readByte(b);
 }

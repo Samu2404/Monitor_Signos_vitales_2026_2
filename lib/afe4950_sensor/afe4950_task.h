@@ -1,28 +1,46 @@
-#pragma once
-#include "Arduino.h"
-#include "SPI.h"
-#include "AFE4950.h"
-
-class AfeSensor {
-    public:
-        AfeSensor() = default;
-        AfeSensor(const AfeSensor&) = delete;
-        AfeSensor& operator=(const AfeSensor&) = delete;
-
-        
-        /** @brief Inicializa el bus SPI Con los pines segun se asigen y configura el AFE
-        * @return true si la inicializacion fue exitosa, false si hubo error
-        * @note Genera un bloqueo de 2 segundos al inicializar el AFE4950
-        */
-        bool begin ( uint8_t sclkPin = 18, uint8_t misoPin = 19, uint8_t mosiPin = 23, uint8_t csPin = 5, uint8_t resetPin = 4, uint8_t rdyPin = 27);
+    #pragma once
+    #include "Arduino.h"
+    #include "afe4950_driver.h"
+    #include "afe4950_parser.h"
 
 
-        void start(); // habilita la adquisicion de datos del AFE4950
-        void stop(); // deshabilita la adquisicion de datos del AFE4950
-        bool readByte(uint8_t& b);   // true si había 4 bytes disponibles
+    class AfeTask {
+        public:
+            using FrameSink = void (*)(const AfeParser::Frame& f,  void *ctx);
+            using ByteSource = bool (*)(uint8_t& b);
+            
+            AfeTask (AfeSensor& afe);
+
+            /**
+             * @brief Crea la tarea de adquisicion 
+             * @param sink funcion que recibe las tramas completas
+             * @param ctx Puntero a contexto que se pasa a la funcion sink
+             * @param source funcion que entrega los bytes de la trama
+             */
+
+            void begin (FrameSink sink, void* ctx = nullptr, ByteSource source = nullptr);
+
+            uint32_t frames();
+
+        private:
+            static constexpr uint32_t PollPeriodMs = 10; // Periodo de muestreo de la tarea
+            static constexpr size_t   TaskStackSize = 4096;
+            static constexpr uint8_t  TaskPriority  = 2;      // Igual que EcgTask/PpgTask
+            static constexpr uint8_t  TaskCore      = 0;      // Core distinto al de NextionHMI y loop()
 
 
-    private:
-        AFE4950 _afe;
-        bool _ready = false;
-};
+            static void _taskEntry (void* self);
+            void _taskLoop();
+
+            AfeSensor&   _afe;
+            AfeParser    _parser;                             // Solo lo usa _taskLoop
+            FrameSink    _sink = nullptr;
+            void*        _ctx = nullptr;
+            ByteSource   _source = nullptr;
+            volatile uint32_t _frames = 0;                    
+            TaskHandle_t _taskHandle = nullptr;
+
+
+
+    };
+            
