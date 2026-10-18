@@ -19,8 +19,8 @@ class AfeSensor {
 
         void start(); // habilita la adquisicion de datos del AFE4950
         void stop(); // deshabilita la adquisicion de datos del AFE4950
-        bool readWord(uint8_t word[4]);   // true si había 4 bytes disponibles
-    
+        bool readByte(uint8_t& b);   // true si había 4 bytes disponibles
+
 
     private:
         AFE4950 _afe;
