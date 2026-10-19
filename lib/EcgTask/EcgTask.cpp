@@ -12,7 +12,9 @@ bool EcgTask::_init(float fs) {
     if (_mutex == nullptr) {
         return false;
     }
+    _scaler.begin(fs,GraphMinAmp);
     _hmi.configWaveform(GraphId, GraphChannel, 0);  
+
     return true;
 }
 
@@ -66,7 +68,7 @@ bool EcgTask:: process (int32_t sample, uint32_t tUs){
         xSemaphoreGive(_mutex);
     }
 
-    if (_graph.push((uint32_t)sample)) {
+    if (_graph.push(_scaler.scale((float)sample))) {
         _hmi.graphWaveform(GraphId, GraphChannel, _graph.first());
         _hmi.graphWaveform(GraphId, GraphChannel, _graph.second());
     }
