@@ -36,7 +36,7 @@ void BpTask::onBeat() {
     bool  calReq = false, lost = false;
     float sbp = 0.0f, dbp = 0.0f;
 
-    if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {
+    if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
         calReq = _calRequest;
         lost   = _lostRequest;
         sbp = _calSbp;

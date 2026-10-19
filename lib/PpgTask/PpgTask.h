@@ -4,6 +4,7 @@
 #include <NextionHMI.h>
 #include <WaveDecimator.h>
 #include "biosignals.h"
+#include "WaveScaler.h"
 
 class PpgTask {
     public: 
@@ -47,12 +48,13 @@ class PpgTask {
         static constexpr uint16_t GraphDecimation= 4;   // Muestras por ventana: 2·250/4 = 125 puntos/s en la gráfica
         static constexpr uint8_t GraphId= 2;
         static constexpr uint8_t GraphChannel= 0;
+        static constexpr float GraphMinAmp = 20.0f; // Amplitud minima de la grafica
+
+
 
         // --- Señal y gráfica (el filtro y el detector viven en PpgProcessor, biosignals) ---
         static constexpr bool  InvertSignal  = false;  // Solo modo ADC: true = invierte (4095 - x) si el sensor baja de voltaje en sístole
         static constexpr bool  GraphFiltered = false;  // false = graficar la señal cruda; true = la filtrada
-        static constexpr float GraphGain   = 1.0f;   // escala de la señal filtrada en la gráfica
-        static constexpr int32_t GraphOffset = 2048; // la salida filtrada es bipolar: se centra a media escala
 
         static constexpr size_t TaskStackSize= 4096;
         static constexpr uint8_t TaskPriority= 2;   // Mayor que la tarea del HMI (1) para no perder el ritmo de 4 ms
@@ -63,7 +65,9 @@ class PpgTask {
         Snapshot _shared;                     // Último resultado publicado; protegido por _mutex
         SemaphoreHandle_t _mutex = nullptr;
         TaskHandle_t _taskHandle = nullptr;
-        PpgProcessor _proc;                   // Filtro + detector de pulsos. Solo lo usa process() (no requiere mutex)
+        PpgProcessor _proc;                   
+        WaveScaler _scaler;
+
         uint16_t _shownPulseRate = 0;         // Último valor enviado al HMI (para mandar el 0 una sola vez)
         SampleSource _source = nullptr;       // Fuente de muestras alternativa al ADC
         float    _fs = ADCsampleRateHz;       // Frecuencia de muestreo del modo activo

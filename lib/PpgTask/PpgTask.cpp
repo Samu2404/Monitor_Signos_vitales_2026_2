@@ -1,7 +1,7 @@
 #include "PpgTask.h"
 
 
-// #define PPG_DEBUG 1
+
 
 PpgTask::PpgTask(NextionHMI& hmi): _hmi(hmi), _shared{}, _proc{} {
     
@@ -15,6 +15,7 @@ bool PpgTask::_init(float fs) {
     _fs = fs;
     ppg_init(&_proc, fs);                            // Filtro + detector
     _hmi.configWaveform(GraphId, GraphChannel, 0);   // Solo registra la escala; el ritmo lo da _graph
+    _scaler.begin(fs, GraphMinAmp);
     return true;
 }
 
@@ -66,16 +67,9 @@ void PpgTask::process(int32_t sample, uint32_t tUs) {
         xSemaphoreGive(_mutex);
     }
 
-    // OJO: la gráfica espera 0..4095. Con ADC o simulador se cumple; con el AFE
-    // (con signo y 22 bits) hay que escalar antes (pendiente: WaveScaler)
-    int32_t g = sample;                   // Señal cruda
-    if (GraphFiltered) {
-        g = (int32_t)lroundf(r.filtered * GraphGain) + GraphOffset;   // Filtrada: bipolar -> media escala
-    }
-    if (g < 0)    g = 0;
-    if (g > 4095) g = 4095;
-
-    if (_graph.push((uint32_t)g)) {   // Mín y máx de cada ventana
+    // Gráfica: cruda o filtrada, centrada y escalada (el detector ya usó la original)
+    uint32_t g = _scaler.scale(GraphFiltered ? r.filtered : (float)sample);
+    if (_graph.push(g)) {   // Mín y máx de cada ventana
         _hmi.graphWaveform(GraphId, GraphChannel, _graph.first());
         _hmi.graphWaveform(GraphId, GraphChannel, _graph.second());
     }
