@@ -192,7 +192,6 @@ private:
     static constexpr int32_t Unknown = INT32_MIN;   // Valor aún no enviado / no recibido
     static constexpr int NoPageEvent = -1;          // Marca en EasyNex::currentPageId: no llegó ninguna página
     static const char* const NumObjects[ValCount];  // Objeto del Nextion de cada ValueId
-    static const uint8_t NumPages[ValCount];          // Página del Nextion de cada ValueId
 
 
     WaveChannel* _findWaveform(uint8_t id, uint8_t channel);
@@ -243,7 +242,7 @@ private:
     int32_t _lastValues[ValCount];   // Último valor que tiene la pantalla (Unknown = desconocido)
     int32_t _wanted[ValCount];       // Último valor pedido por las tareas (Unknown = ninguno)
     uint32_t _lastValuesTime = 0;
-    bool _lostRequest = false;  
+
     volatile uint8_t _page = PageMain;   // Al arrancar se asume main hasta que responda "sendme"
 };
 

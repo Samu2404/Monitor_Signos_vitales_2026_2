@@ -232,7 +232,7 @@ void NextionHMI::_onCustomCommand() {
             CalRequest req;
             req.sbp = (uint8_t) _myNex.readByte();
             req.dbp = (uint8_t) _myNex.readByte();
-            xQueueSend(_calBox, &req, 0);
+            xQueueOverwrite(_calBox, &req);   // Solo se guarda la última solicitud
             break;
         default:                                    // Grupo desconocido: se descartan sus datos
             for (uint8_t i =1 ; i < _myNex.cmdLength; i++){

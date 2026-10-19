@@ -65,7 +65,7 @@ private:
     bool  _calRequest = false;       // Pedido de calibración pendiente; protegido por _mutex
     float _calSbp = 0.0f, _calDbp = 0.0f;
     uint32_t _beats = 0;
-    uint8_t _calProgress = 0;
+    bool _lostRequest= false;         
     bool _shown= false;
 
 };
