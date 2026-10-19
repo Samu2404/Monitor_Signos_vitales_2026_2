@@ -57,7 +57,9 @@ private:
     SemaphoreHandle_t _mutex = nullptr;
     TaskHandle_t _taskHandle = nullptr;
     
-    // Comprueba si los electrodos están conectados y actualiza la pantalla
+    static constexpr float BeatTimeoutS = 3.0f;   // s sin latidos aceptados para borrar la frecuencia cardíaca
+    float _fs= ADCsampleRateHz;          // Frecuencia de muestreo del ADC [Hz]
+    bool _bpmShown = false;                     // true si la frecuencia cardíaca se muestra en la pantalla
     static volatile bool s_leadOffFlag;          // La ISR solo la marca; _electrodeCheck() la consume
     static constexpr uint8_t isrPinLOMinus= 17;  // LOD- del AD8232 (electrodo derecho)
     static constexpr uint8_t isrPinLOPlus= 16;   // LOD+ del AD8232 (electrodo izquierdo)

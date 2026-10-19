@@ -33,8 +33,7 @@ void BpTask::onBeat() {
     }
 
     // El pedido de calibración llega desde otra tarea: se aplica aquí, en el hilo del productor
-    bool  calReq = false;
-        bool  calReq = false, lost = false;
+    bool  calReq = false, lost = false;
     float sbp = 0.0f, dbp = 0.0f;
 
     if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {

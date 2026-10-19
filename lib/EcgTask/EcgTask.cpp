@@ -7,6 +7,7 @@ EcgTask::EcgTask(NextionHMI& hmi) : _hmi(hmi), _shared{} {
 
 bool EcgTask::_init(float fs) {
     pt_init(&_pt, fs);
+    _fs = fs;
     _mutex = xSemaphoreCreateMutex();
     if (_mutex == nullptr) {
         return false;
@@ -54,19 +55,28 @@ bool EcgTask:: process (int32_t sample, uint32_t tUs){
     PT_Result result= tUs ? pt_process_t(&_pt, (float) sample, tUs) :
                         pt_process(&_pt, (float) sample);
     
-    Snapshot snap {result.bpm, pt_beats(&_pt),sample};
+    // Se mide en muestras (pt.n), así sirve igual en modo ADC y en modo AFE
+    bool lost = pt_beats(&_pt) > 0 &&
+                (float)(_pt.n - _pt.last_qrs_n) > BeatTimeoutS * _fs;
+    float bpm = lost ? 0.0f : result.bpm;
 
+    Snapshot snap{bpm, pt_beats(&_pt), sample};
     if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {
-        _shared= snap;
+        _shared = snap;
         xSemaphoreGive(_mutex);
     }
 
-    if (_graph.push((uint32_t) sample)) {   
+    if (_graph.push((uint32_t)sample)) {
         _hmi.graphWaveform(GraphId, GraphChannel, _graph.first());
         _hmi.graphWaveform(GraphId, GraphChannel, _graph.second());
     }
+
     if (result.beat && result.bpm > 0.0f) {
         _hmi.writeBPM((int)result.bpm);
+        _bpmShown = true;
+    } else if (lost && _bpmShown) {
+        _hmi.writeBPM(0);                         // Se perdió el ECG: se avisa una sola vez
+        _bpmShown = false;
     }
     return result.beat;
 }
