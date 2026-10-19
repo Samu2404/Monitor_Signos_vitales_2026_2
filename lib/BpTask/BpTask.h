@@ -17,6 +17,7 @@ public:
         bool     calibrated;
         uint32_t beats;        // Latidos aceptados desde el inicio
         uint32_t lastBeatMs;
+        uint8_t calProgress;   // 0-100, solo si calibrating
     };
 
     BpTask(NextionHMI& hmi) : _hmi(hmi) {}
@@ -37,8 +38,12 @@ public:
     /** @brief Llamar cuando EcgTask detecta latido en la última muestra entregada con pushEcg */
     void onBeat();
 
-    /** @brief Pide calibrar con la medida del tensiómetro. Seguro desde otra tarea (p. ej. loop) */
-    void startCalibration(float sbp, float dbp);
+    /** @brief Pide calibrar con la medida del tensiómetro. Seguro desde otra tarea (p. ej. loop) 
+     *  @param sbp Presión sistólica medida [mmHg]
+     * @param dbp Presión diastólica medida [mmHg]
+     * @return false si los valores son invalidos
+     */
+    bool startCalibration(float sbp, float dbp);
 
     /** @brief Si no hay latidos aceptados en StaleMs, borra la presión de la pantalla.
      *  @note Llamarlo periódicamente desde loop() (BpTask no tiene tarea propia)
@@ -60,6 +65,7 @@ private:
     bool  _calRequest = false;       // Pedido de calibración pendiente; protegido por _mutex
     float _calSbp = 0.0f, _calDbp = 0.0f;
     uint32_t _beats = 0;
+    uint8_t _calProgress = 0;
     bool _shown= false;
 
 };

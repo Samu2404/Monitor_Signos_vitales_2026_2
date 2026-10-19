@@ -46,12 +46,16 @@ void BpTask::onBeat() {
     }
 
     BP_Result r = bp_on_beat(&_bp);
+    uint8_t progress = r.calibrated ? 100 : (uint8_t)lroundf(_bp.n_cal *100 / BP_NCAL);
+    if (r.calibrating || r.cal_done) {
+        _hmi.writeCalibrationStatus(r.calibrated ? 2 : 1, progress);  // 0=sin calibrar, 1=calibrando, 2=calibrado
+    }
     if (!r.beat) {
         return;                                  // Latido descartado o primero de la serie
     }
     _beats++;
 
-        Snapshot snap{r.ptt_avg, r.pir_avg, r.sbp, r.dbp, r.calibrating, r.calibrated, _beats, millis()};
+    Snapshot snap{r.ptt_avg, r.pir_avg, r.sbp, r.dbp, r.calibrating, r.calibrated, _beats, millis(), progress};
     if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {
         _shared = snap;
         if (r.calibrated) {
@@ -65,16 +69,21 @@ void BpTask::onBeat() {
     }
 }
 
-void BpTask::startCalibration(float sbp, float dbp) {
+bool  BpTask::startCalibration(float sbp, float dbp) {
     if (_mutex == nullptr) {
-        return;
+        return false;
     }
-    if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-        _calSbp = sbp;
-        _calDbp = dbp;
-        _calRequest = true;                      // Se aplica en el próximo latido
-        xSemaphoreGive(_mutex);
+    if ( sbp <70 || sbp > 250 || dbp < 40 || dbp > 150 || sbp <= dbp) {
+        return false;                                  // Valores inválidos
     }
+    if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(1)) != pdTRUE) { // No se pudo tomar el mutex
+        return false;
+    }
+    _calSbp = sbp;
+    _calDbp = dbp;
+    _calRequest = true;
+    xSemaphoreGive(_mutex);
+    return true;
 }
 
 BpTask::Snapshot BpTask::getSnapshot() {

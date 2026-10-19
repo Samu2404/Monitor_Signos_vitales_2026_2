@@ -79,6 +79,22 @@ public:
      */
     void writeBloodPressure(int sistolica, int diastolica);
 
+
+    /** @brief Escribe el estado de la calibración en la pantalla
+     * @param state: Estado de la calibración (0 = no calibrando, 1 = calibrando, 2 = calibración completa)
+     * @param progress: Progreso de la calibración (0-100)
+     */
+    void writeCalibrationStatus (int state , int progress);  
+
+
+
+    /** @brief Toma la solicitud de calibración
+     * @param sbp: Presión sistólica
+     * @param dbp: Presión diastólica
+     * @return true si se tomó la solicitud, false en caso contrario
+     */
+    bool takeCalibrationRequest(int& sbp, int& dbp);
+
     /** @brief Registra una gráfica con su propia tasa de refresco
      * @param id: ID del objeto en la pantalla
      * @param channel: Canal del objeto en la pantalla
@@ -144,7 +160,7 @@ private:
     static constexpr uint32_t DefaultMapValue = 4096; // MapValue por defecto (ADC de 12 bits)
 
     // Identificador de cada valor numérico dentro de la caché
-    enum ValueId : uint8_t { ValSpO2, ValBPM, ValPulseRate, ValHRV, ValTemperature, ValRespiration, ValSistolica, ValDiastolica,ValCount };
+    enum ValueId : uint8_t { ValSpO2, ValBPM, ValPulseRate, ValHRV, ValTemperature, ValRespiration, ValSistolica, ValDiastolica, ValCalState, ValCalProgress, ValCount };
 
     // Estado de cada gráfica: su periodo y cuándo se envió su último punto
     struct WaveChannel {
@@ -176,6 +192,8 @@ private:
     static constexpr int32_t Unknown = INT32_MIN;   // Valor aún no enviado / no recibido
     static constexpr int NoPageEvent = -1;          // Marca en EasyNex::currentPageId: no llegó ninguna página
     static const char* const NumObjects[ValCount];  // Objeto del Nextion de cada ValueId
+    static const uint8_t NumPages[ValCount];          // Página del Nextion de cada ValueId
+
 
     WaveChannel* _findWaveform(uint8_t id, uint8_t channel);
     void _setNum(ValueId slot, int32_t value);   // Guarda el valor y lo envía si se ve y cambió
@@ -183,6 +201,7 @@ private:
     void _invalidate();                          // Solo desde la tarea del HMI (o el constructor)
     void _listen();                              // Lee los comandos que manda el Nextion
     void _onPageLoaded(uint8_t page);
+    
     bool _showsNumbers() const { return _page == PageMain; }
     bool _showsWave(uint8_t id) const {
         if (_page == PageMain)   return true;
@@ -199,6 +218,8 @@ private:
 
     void _flushVitals();
     QueueHandle_t _vitalsBox = nullptr;
+    struct CalRequest {        int sbp;        int dbp;    };
+    QueueHandle_t _calBox = nullptr;
 
 
 
@@ -222,6 +243,7 @@ private:
     int32_t _lastValues[ValCount];   // Último valor que tiene la pantalla (Unknown = desconocido)
     int32_t _wanted[ValCount];       // Último valor pedido por las tareas (Unknown = ninguno)
     uint32_t _lastValuesTime = 0;
+    bool _lostRequest = false;  
     volatile uint8_t _page = PageMain;   // Al arrancar se asume main hasta que responda "sendme"
 };
 
