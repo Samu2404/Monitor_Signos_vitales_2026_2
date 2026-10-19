@@ -151,6 +151,106 @@ float ppg_filter_process(PpgFilter* p, float x) {
     return chain_process(&p->chain, x);
 }
 
+/* ======================= Procesador PPG (detector) ====================== */
+static void ppg_detector_clear(PpgProcessor* p) {
+    p->amp          = 0.0f;
+    p->above        = false;
+    p->peak_val     = 0.0f;
+    p->peak_us      = 0;
+    p->has_last     = false;
+    p->last_beat_us = 0;
+    memset(p->rr, 0, sizeof(p->rr));
+    p->rr_idx = 0;
+    p->rr_n   = 0;
+    p->bpm    = 0.0f;
+}
+
+void ppg_init(PpgProcessor* p, float fs) {
+    ppg_filter_init(&p->filter, fs, PPG_HP_FC, PPG_LP_FC);
+    p->min_amp   = PPG_PK_MIN_AMP;
+    p->amp_decay = expf(-1.0f / (PPG_PK_AMP_TAU_S * fs));
+    ppg_detector_clear(p);
+    p->initialized = true;
+}
+
+void ppg_reset(PpgProcessor* p) {
+    ppg_filter_reset(&p->filter);
+    ppg_detector_clear(p);
+}
+
+/* Se llama cuando la señal baja del umbral: decide si el pulso cuyo máximo
+ * está en peak_us se acepta. Devuelve true si se aceptó y hay nueva FC. */
+static bool ppg_accept_peak(PpgProcessor* p) {
+    if (!p->has_last) {
+        p->has_last     = true;              /* 1er pulso: solo marca la referencia */
+        p->last_beat_us = p->peak_us;
+        return false;
+    }
+
+    uint32_t rr_ms = (p->peak_us - p->last_beat_us) / 1000u;
+    if (rr_ms < PPG_PK_REFRACTORY_MS) {
+        return false;                        /* rebote / pico secundario: se ignora sin mover la referencia */
+    }
+    p->last_beat_us = p->peak_us;
+    if (rr_ms > PPG_PK_MAX_RR_MS) {
+        p->rr_n   = 0;                       /* se perdieron pulsos: reinicia el promedio */
+        p->rr_idx = 0;
+        return false;
+    }
+
+    p->rr[p->rr_idx] = (float)rr_ms;
+    p->rr_idx = (p->rr_idx + 1) % PPG_PK_RR_COUNT;
+    if (p->rr_n < PPG_PK_RR_COUNT) p->rr_n++;
+
+    float sum = 0.0f;
+    for (int i = 0; i < p->rr_n; i++) sum += p->rr[i];
+    p->bpm = 60000.0f * (float)p->rr_n / sum;
+    return true;
+}
+
+PPG_Result ppg_process(PpgProcessor* p, float sample, uint32_t t_us) {
+    PPG_Result r;
+    memset(&r, 0, sizeof(r));
+
+    float x = ppg_filter_process(&p->filter, sample);
+    r.filtered = x;
+
+    p->amp *= p->amp_decay;
+    if (x > p->amp) p->amp = x;
+    float thr = p->amp * PPG_PK_THRESH_FRAC;
+    r.threshold = thr;
+
+    if (!p->above) {
+        if (p->amp >= p->min_amp && x > thr) {   /* empieza un pulso */
+            p->above    = true;
+            p->peak_val = x;
+            p->peak_us  = t_us;
+        }
+    } else {
+        if (x > p->peak_val) {                   /* sigue el máximo */
+            p->peak_val = x;
+            p->peak_us  = t_us;
+        }
+        if (x < thr) {                           /* el pulso terminó */
+            p->above = false;
+            if (ppg_accept_peak(p)) {
+                r.beat    = true;
+                r.peak_us = p->peak_us;
+            }
+        }
+    }
+
+    /* Sin pulsos durante el timeout: la FC deja de ser válida */
+    if (p->has_last && (t_us - p->last_beat_us) > PPG_PK_TIMEOUT_MS * 1000u) {
+        p->bpm    = 0.0f;
+        p->rr_n   = 0;
+        p->rr_idx = 0;
+    }
+
+    r.bpm = p->bpm;
+    return r;
+}
+
 void mwi_init(MovingIntegrator* m, int window) {
     if (window < 1)            window = 1;
     if (window > BIO_MWI_MAX)  window = BIO_MWI_MAX;
@@ -466,6 +566,177 @@ uint32_t pt_beats(const PanTompkins* pt) { return pt->beats; }
 
 float pt_rr_ms(const PanTompkins* pt) { return pt->rr_med; }
 
-// ====================== Calculo de Presion arterial a partir de PTT ===========================
+/* ============ Presión arterial por PTT + PIR (Ding et al., 2017) ============ */
+#define BP_ECG(b, i)  ((b)->ecg[(i) % BP_ECG_BUF])
+#define BP_PPG(b, i)  ((b)->ppg[(i) % BP_PPG_BUF])
+
+void bp_init(BpEstimator* b, float fs_ecg, float fs_ppg) {
+    memset(b, 0, sizeof(*b));
+    b->fs_ecg   = fs_ecg;
+    b->fs_ppg   = fs_ppg;
+    b->ecg_sign = 1;
+    b->ppg_sign = 1;
+    b->use_pir  = true;
+}
+
+void bp_push_ecg(BpEstimator* b, int32_t sample) {
+    BP_ECG(b, b->n_ecg) = sample * b->ecg_sign;
+    b->n_ecg++;
+}
+
+void bp_push_ppg(BpEstimator* b, int32_t sample) {
+    BP_PPG(b, b->n_ppg) = sample * b->ppg_sign;   /* se guarda como luz: baja con el pulso */
+    b->n_ppg++;
+}
+
+void bp_start_calibration(BpEstimator* b, float sbp, float dbp) {
+    b->sbp0 = sbp;
+    b->dbp0 = dbp;
+    b->sum_ptt = 0.0f;
+    b->sum_pir = 0.0f;
+    b->n_cal = 0;
+    b->calibrated  = false;
+    b->calibrating = true;
+}
+
+void bp_model(const BpEstimator* b, float ptt_ms, float pir, float* sbp, float* dbp) {
+    float pp0  = b->sbp0 - b->dbp0;            /* presión de pulso */
+    float mbp0 = b->dbp0 + pp0 / 3.0f;         /* presión media    */
+    float r    = b->ptt0 / ptt_ms;
+    float mbp  = mbp0 * (b->pir0 / pir);
+    float pp   = pp0 * (pir / b->pir0) * r * r;
+    *sbp = mbp + 2.0f * pp / 3.0f;
+    *dbp = mbp - pp / 3.0f;
+}
+
+/* Índice PPG simultáneo a un índice ECG */
+static uint32_t bp_ecg_to_ppg(const BpEstimator* b, uint32_t i_ecg) {
+    return (uint32_t)((uint64_t)i_ecg * (uint64_t)(b->fs_ppg + 0.5f) / (uint64_t)(b->fs_ecg + 0.5f));
+}
+
+/* Paso 5: PTT y PIR del latido que empieza en R (índice ECG) y termina en r_next.
+ * Devuelve false si el latido no sirve. */
+static bool bp_measure_beat(const BpEstimator* b, uint32_t R, uint32_t r_next,
+                            float* ptt_ms, float* pir) {
+    float rr_ms = (float)(r_next - R) * 1000.0f / b->fs_ecg;
+    if (rr_ms < 333.0f || rr_ms > 2000.0f) {
+        return false;                              /* RR imposible (fuera de 30–180 lpm) */
+    }
+
+    /* 5a. Subida más rápida del pulso en [R+100, R+500] ms (sin pasar del R siguiente).
+     * El PPG guardado es luz, así que "sube el pulso" = la luz baja más rápido. */
+    int      h      = ms_to_samples(10.0f, b->fs_ppg);      /* pendiente en ±10 ms */
+    uint32_t p_r    = bp_ecg_to_ppg(b, R);
+    uint32_t p_next = bp_ecg_to_ppg(b, r_next);
+    uint32_t ini    = p_r + (uint32_t)ms_to_samples(100.0f, b->fs_ppg);
+    uint32_t fin    = p_r + (uint32_t)ms_to_samples(500.0f, b->fs_ppg);
+    if (fin > p_next)                  fin = p_next;
+    if (fin + h >= b->n_ppg)           fin = b->n_ppg - 1 - h;   /* aún no llegan esas muestras */
+    if (ini < (uint32_t)h || ini >= fin) {
+        return false;
+    }
+
+    uint32_t k = ini;
+    int64_t  mejor = 0;
+    for (uint32_t i = ini; i < fin; i++) {
+        int64_t pend = (int64_t)BP_PPG(b, i - h) - (int64_t)BP_PPG(b, i + h);
+        if (pend > mejor) { mejor = pend; k = i; }
+    }
+    if (mejor <= 0) {
+        return false;                              /* no hubo subida */
+    }
+
+    /* 5b. PTT */
+    *ptt_ms = (float)k * 1000.0f / b->fs_ppg - (float)R * 1000.0f / b->fs_ecg;
+
+    /* 5c. PIR = luz máxima entre latidos (antes de k) / luz mínima en el pulso (después de k) */
+    *pir = 1.0f;
+    if (b->use_pir) {
+        int32_t ih = BP_PPG(b, p_r), il = BP_PPG(b, k);
+        for (uint32_t i = p_r; i <= k; i++) {
+            if (BP_PPG(b, i) > ih) ih = BP_PPG(b, i);
+        }
+        uint32_t fin_l = k + (uint32_t)ms_to_samples(300.0f, b->fs_ppg);
+        if (fin_l > p_next)     fin_l = p_next;
+        if (fin_l >= b->n_ppg)  fin_l = b->n_ppg - 1;
+        for (uint32_t i = k; i <= fin_l; i++) {
+            if (BP_PPG(b, i) < il) il = BP_PPG(b, i);
+        }
+        if (il <= 0) {
+            return false;                          /* sin nivel DC válido */
+        }
+        *pir = (float)ih / (float)il;
+    }
+    return true;
+}
+
+/* Paso 6: revisar, promediar y (pasos 7 y 8) calibrar o estimar la presión */
+static bool bp_review(BpEstimator* b, float ptt, float pir, BP_Result* r) {
+    if (ptt < BP_PTT_MIN_MS || ptt > BP_PTT_MAX_MS) return false;          /* fuera de rango */
+    if (b->use_pir && (pir <= 1.0f || pir > BP_PIR_MAX)) return false;
+    if (b->n_prom == BP_NPROM && fabsf(ptt - b->ptt_avg) > BP_ARTIFACT_FRAC * b->ptt_avg) {
+        return false;                                                       /* artefacto */
+    }
+
+    b->ptt_hist[b->i_prom] = ptt;
+    b->pir_hist[b->i_prom] = pir;
+    b->i_prom = (b->i_prom + 1) % BP_NPROM;
+    if (b->n_prom < BP_NPROM) b->n_prom++;
+    float sp = 0.0f, si = 0.0f;
+    for (int j = 0; j < b->n_prom; j++) { sp += b->ptt_hist[j]; si += b->pir_hist[j]; }
+    b->ptt_avg = sp / (float)b->n_prom;
+    b->pir_avg = si / (float)b->n_prom;
+
+    if (b->calibrating) {
+        b->sum_ptt += ptt;
+        b->sum_pir += pir;
+        if (++b->n_cal >= BP_NCAL) {
+            b->ptt0 = b->sum_ptt / (float)b->n_cal;
+            b->pir0 = b->sum_pir / (float)b->n_cal;
+            b->calibrating = false;
+            b->calibrated  = true;
+            r->cal_done    = true;
+        }
+    }
+    if (b->calibrated) {
+        bp_model(b, b->ptt_avg, b->pir_avg, &r->sbp, &r->dbp);
+    }
+    return true;
+}
+
+BP_Result bp_on_beat(BpEstimator* b) {
+    BP_Result r;
+    memset(&r, 0, sizeof(r));
+
+    /* Paso 4: el pico R real es el máximo del ECG antes del aviso del Pan-Tompkins */
+    uint32_t m = b->n_ecg - 1;
+    if (b->n_ecg == 0 || m < (uint32_t)ms_to_samples(500.0f, b->fs_ecg)) {
+        return r;                                  /* ignora el arranque */
+    }
+    uint32_t ini = m - (uint32_t)ms_to_samples(400.0f, b->fs_ecg);
+    uint32_t min_ini = b->r_prev + (uint32_t)ms_to_samples(250.0f, b->fs_ecg);
+    if (b->has_r && ini < min_ini) ini = min_ini;
+    if (ini > m) ini = m;
+
+    uint32_t R = ini;
+    for (uint32_t i = ini; i <= m; i++) {
+        if (BP_ECG(b, i) > BP_ECG(b, R)) R = i;
+    }
+
+    float ptt, pir;
+    if (b->has_r && bp_measure_beat(b, b->r_prev, R, &ptt, &pir)) {
+        r.ptt_ms = ptt;
+        r.pir    = pir;
+        r.beat   = bp_review(b, ptt, pir, &r);
+    }
+    b->r_prev = R;
+    b->has_r  = true;
+
+    r.ptt_avg     = b->ptt_avg;
+    r.pir_avg     = b->pir_avg;
+    r.calibrating = b->calibrating;
+    r.calibrated  = b->calibrated;
+    return r;
+}
 
 

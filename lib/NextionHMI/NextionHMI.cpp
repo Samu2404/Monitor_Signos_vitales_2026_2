@@ -6,13 +6,18 @@
 // El Nextion debe estar en otro UART (Serial2); si comparte Serial, la depuración corrompe el enlace
 // #define NEXTION_DEBUG
 
+
 const char* const NextionHMI::NumObjects[ValCount] = {
     "nSpO2.val",
     "nHR.val",
     "nPR.val",
     "nHRV.val",
     "nT.val",
-    "nRR.val"
+    "nRR.val",
+    "nSistolica.val",
+    "nDiastolica.val",
+    "nCalEst.val",
+    "jCal.val"
 };
 
 NextionHMI* NextionHMI::_instance = nullptr;
@@ -49,7 +54,11 @@ void NextionHMI::begin(uint32_t baudRate, uint8_t rxPin, uint8_t txPin, uint32_t
     if (_vitalsBox == nullptr) {
         _vitalsBox = xQueueCreate(1, sizeof(Vitals));
     }
-    if (_vitalsBox == nullptr || _queue == nullptr) {
+    if (_calBox == nullptr) {
+        _calBox = xQueueCreate(1, sizeof(CalRequest));
+    }
+
+    if (_vitalsBox == nullptr || _queue == nullptr || _calBox == nullptr) {
         return ;
     }
     _instance = this;
@@ -108,6 +117,28 @@ void NextionHMI::writeRespirationRate(int respirationRate) {
     _enqueueNum(ValRespiration, respirationRate);
 }
 
+void NextionHMI::writeBloodPressure(int sistolica, int diastolica) {
+    _enqueueNum(ValSistolica, sistolica);
+    _enqueueNum(ValDiastolica, diastolica);
+}
+
+void NextionHMI::writeCalibrationStatus (int state , int progress) {
+    _enqueueNum(ValCalState, state);
+    _enqueueNum(ValCalProgress, progress);
+}
+
+
+
+bool NextionHMI::takeCalibrationRequest(int& sbp, int& dbp) {
+    CalRequest req;
+    if (_calBox == nullptr || xQueueReceive(_calBox, &req, 0) != pdTRUE) {
+        return false;
+    } 
+    sbp = req.sbp;
+    dbp = req.dbp;
+
+    return true;
+}
 
 void NextionHMI::updateValues(int spo2, int bpm, int pulseRate, int hrVariance, float temperature, int respirationRate) {
     if (_vitalsBox == nullptr) {
@@ -196,6 +227,12 @@ void NextionHMI::_onCustomCommand() {
     switch (_myNex.cmdGroup){
         case 'W':                                   // printh 23 02 57 <id>: gráfica visible en full_wf
             _fullWfId = (uint8_t)_myNex.readByte();
+            break;
+        case 'C':                                   // printh 23 02 67 <sbp> <dbp>: calibración solicitada
+            CalRequest req;
+            req.sbp = (uint8_t) _myNex.readByte();
+            req.dbp = (uint8_t) _myNex.readByte();
+            xQueueOverwrite(_calBox, &req);   // Solo se guarda la última solicitud
             break;
         default:                                    // Grupo desconocido: se descartan sus datos
             for (uint8_t i =1 ; i < _myNex.cmdLength; i++){
