@@ -24,10 +24,10 @@ namespace AlarmConfig {
     constexpr uint16_t BP_DIA_LOW_OFF = 65;   // mmHg
     */
 
-    constexpr float TEMP_HIGH_ON = 38;  // °C
-    constexpr float TEMP_HIGH_OFF = 37; // °C
-    constexpr float TEMP_LOW_ON = 35;    // °C
-    constexpr float TEMP_LOW_OFF = 36;   // °C
+    constexpr float TEMP_HIGH_ON = 38.0f;  // °C
+    constexpr float TEMP_HIGH_OFF = 37.0f; // °C
+    constexpr float TEMP_LOW_ON = 35.0f;    // °C
+    constexpr float TEMP_LOW_OFF = 36.0f;   // °C
 
     // Persistencia [s] (una llamada a update() por segundo)
     constexpr uint8_t VITAL_PERSIST_ON_S  = 10;   // FC y SpO2: segundos para activar

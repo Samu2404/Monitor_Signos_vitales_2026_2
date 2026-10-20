@@ -1,5 +1,6 @@
 #include "BLETask.h"
-
+#include "SnapshotFormatter.h"
+#include "math.h"
 
 BLETask::BLETask(EcgTask& ecg, PpgTask& ppg, BpTask& bp)
     : _ecg(ecg), _ppg(ppg), _bp(bp) {
@@ -25,7 +26,8 @@ void BLETask::_taskLoop() {
         // Duerme hasta cumplir 1 s desde la vuelta anterior
         vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(BLEConfig::SNAPSHOT_INTERVAL_MS));
 
-        VitalSigns v = _collect();   // 1. Reúne los datos de ECG, PPG y BP
+        VitalSigns v = _source ? _source() : _collect();   // 1. Reúne los datos de ECG, PPG y BP
+        _evaluateAlarms(v);            // 2. Evalúa las reglas de alarma
         _publishSnapshot(v);         // 2. Texto -> característica Snapshot
         _publishAlarms();            // 3. Notifica si cambiaron las alarmas
     }
@@ -69,3 +71,46 @@ void BLETask::_evaluateAlarms(const VitalSigns& v) {
     }
 }
 
+VitalSigns BLETask::_collect() {
+    // Una sola lectura por tarea: datos coherentes y un solo acceso a cada mutex
+    EcgTask::Snapshot ecg = _ecg.getSnapshot();
+    PpgTask::Snapshot ppg = _ppg.getSnapshot();
+    BpTask::Snapshot  bp  = _bp.getSnapshot();
+
+    VitalSigns v;   // Todo empieza en 0 = "sin dato" (temperature, hrv y rr se quedan así)
+
+    // FC del ECG: float -> entero redondeado
+    v.hr = ecg.bpm > 0.0f ? (uint16_t)lroundf(ecg.bpm) : 0;
+
+    // PPG: se limita ANTES de convertir a uint8_t para que no se desborde
+    v.pr   = ppg.pulseRate;
+    v.spo2 = ppg.spo2 > 100 ? 100 : (uint8_t)ppg.spo2;
+
+    // Presión: solo con calibración y con ambas señales presentes (contrato §5)
+    bool bpValid = bp.calibrated && v.hr > 0 && v.pr > 0 && bp.sbp > 0.0f && bp.dbp > 0.0f;
+    v.sys = bpValid ? (uint16_t)lroundf(bp.sbp) : 0;
+    v.dia = bpValid ? (uint16_t)lroundf(bp.dbp) : 0;
+
+    return v;
+}
+
+void BLETask::_publishSnapshot(const VitalSigns& v) {
+    char buffer[BLEConfig::SNAPSHOT_MAX_LEN + 1];   // 31 caracteres + '\0'
+
+    if (!SnapshotFormatter::format(v, buffer, sizeof(buffer))) {
+        Serial.println("[BLE] Error formateando Snapshot");
+        return;
+    }
+    if (!_ble.updateSnapshot(buffer)) {
+        Serial.println("[BLE] Error actualizando Snapshot");
+    }
+}
+
+void BLETask::_publishAlarms() {
+    if (!_alarms.hasChanged()) {
+        return;                       // Caso normal: nada nuevo que notificar
+    }
+    if (_ble.updateAlarms(_alarms.getAlarmString())) {
+        _alarms.clearChanged();       // Solo si se envió; si falló, se reintenta en 1 s
+    }
+}
