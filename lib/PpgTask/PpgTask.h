@@ -38,6 +38,9 @@ class PpgTask {
          */
         void process(int32_t sample, uint32_t tUs = 0);
 
+        void setSpO2(float spo2);
+
+
         Snapshot getSnapshot();
 
     private:
@@ -68,6 +71,7 @@ class PpgTask {
         PpgProcessor _proc;                   
         WaveScaler _scaler;
 
+        uint16_t _shownSpO2 = 0;                 // Último valor enviado al HMI (para mandar el 0 una sola vez)
         uint16_t _shownPulseRate = 0;         // Último valor enviado al HMI (para mandar el 0 una sola vez)
         SampleSource _source = nullptr;       // Fuente de muestras alternativa al ADC
         float    _fs = ADCsampleRateHz;       // Frecuencia de muestreo del modo activo

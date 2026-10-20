@@ -7,6 +7,9 @@ bool AfeSensor::begin(uint8_t sclkPin, uint8_t misoPin, uint8_t mosiPin, uint8_t
 
     SPI.begin(sclkPin, misoPin, mosiPin, csPin);
     _ready = _afe.configure(sclkPin, misoPin, mosiPin, csPin, resetPin, rdyPin);
+    if (_ready) {
+        _afe.enableSpO2(true); // Habilita el cálculo de parámetros de oximetría
+    }
     return _ready;
 }
 
