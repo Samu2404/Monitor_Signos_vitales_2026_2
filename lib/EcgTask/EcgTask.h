@@ -4,6 +4,8 @@
 #include <NextionHMI.h>
 #include <WaveDecimator.h>
 #include <biosignals.h>
+#include "WaveScaler.h"
+
 
 // #define DEBUG 1
 
@@ -46,7 +48,7 @@ private:
     static constexpr size_t TaskStackSize= 4096;
     static constexpr uint8_t TaskPriority= 2;   // Mayor que la tarea del HMI (1) para no perder el ritmo de 3 ms
     static constexpr uint8_t TaskCore= 0;       // Core distinto al de NextionHMI y loop()
-
+    static constexpr float GraphMinAmp = 20.0f; // Amplitud minima de la grafica
     static void _taskEntry(void* self);   // Trampolín: FreeRTOS pide una función sin 'this'
     void _taskLoop();                     // Bucle de la tarea: muestrea, calcula y publica
 
@@ -55,7 +57,8 @@ private:
     PanTompkins _pt;                      // Miembro directo (va a .bss), no en la pila de la tarea
     Snapshot _shared;                     // Último resultado publicado; protegido por _mutex
     SemaphoreHandle_t _mutex = nullptr;
-    TaskHandle_t _taskHandle = nullptr;
+    TaskHandle_t _taskHandle = nullptr;\
+    WaveScaler _scaler;
     
     static constexpr float BeatTimeoutS = 3.0f;   // s sin latidos aceptados para borrar la frecuencia cardíaca
     float _fs= ADCsampleRateHz;          // Frecuencia de muestreo del ADC [Hz]
