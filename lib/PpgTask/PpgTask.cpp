@@ -61,9 +61,10 @@ void PpgTask::process(int32_t sample, uint32_t tUs) {
         _shownPulseRate = 0;
     }
 
-    Snapshot snap{0, pulseRate, sample, r.filtered};   // SpO2 pendiente de implementar
     if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {
-        _shared= snap;
+        _shared.pulseRate= pulseRate;
+        _shared.sample   = sample;
+        _shared.filtered = r.filtered;
         xSemaphoreGive(_mutex);
     }
 
@@ -110,4 +111,20 @@ PpgTask::Snapshot PpgTask::getSnapshot() {
         xSemaphoreGive(_mutex);
     }
     return snap;
+}
+
+void PpgTask::setSpO2(float spo2) {
+    if (_mutex == nullptr) {
+        return;
+    }
+    uint16_t value = (uint16_t)lroundf(spo2);
+    if (value > 100) value = 100;
+    if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(1)) == pdTRUE) {
+        _shared.spo2 = value;
+        xSemaphoreGive(_mutex);
+    }
+    if (value != _shownSpO2) {
+        _hmi.writeSpO2(value);
+        _shownSpO2 = value;
+    }
 }

@@ -7,6 +7,9 @@ bool AfeSensor::begin(uint8_t sclkPin, uint8_t misoPin, uint8_t mosiPin, uint8_t
 
     SPI.begin(sclkPin, misoPin, mosiPin, csPin);
     _ready = _afe.configure(sclkPin, misoPin, mosiPin, csPin, resetPin, rdyPin);
+    if (_ready) {
+        _afe.enableSpO2(true); // Habilita el cálculo de parámetros de oximetría
+    }
     return _ready;
 }
 
@@ -15,6 +18,8 @@ void AfeSensor::start() {
     if (!_ready) {
         return; // no se ha inicializado el AFE4950
     }
+    _pktLen = 0;
+    _pktPos = 0;
     _afe.enableCapture();
 }
 
@@ -29,5 +34,17 @@ bool AfeSensor :: readByte (uint8_t& b){
     if (!_ready) {
         return false; // no se ha inicializado el AFE4950
     }
-    return _afe.readByte(b);
+    if (_pktPos >= _pktLen) {
+        if (!_afe.ready()) {
+            return false; // no hay datos disponibles
+        }
+        _pktLen = _afe.getBytesToSend();
+        _pkt = _afe.getData();
+        _pktPos = 0;
+        if (_pktLen == 0) {
+            return false; // no hay datos disponibles
+        }
+    }
+    b = _pkt[_pktPos++];
+    return true;
 }

@@ -8,7 +8,7 @@
         public:
             using FrameSink = void (*)(const AfeParser::Frame& f,  void *ctx);
             using ByteSource = bool (*)(uint8_t& b);
-            
+            using SpO2Sink = void (*)(const AfeParser::SpO2Params& p, void *ctx);
             AfeTask (AfeSensor& afe);
 
             /**
@@ -19,7 +19,12 @@
              */
 
             void begin (FrameSink sink, void* ctx = nullptr, ByteSource source = nullptr);
-
+            
+            /**
+             * @brief Registra la funcion que recibe los parámetros de SpO2
+             * @param sink funcion que recibe los parámetros de SpO2
+             */
+            void SetSpO2Sink (SpO2Sink sink) { _spo2Sink = sink; }
             uint32_t frames();
 
         private:
@@ -35,6 +40,7 @@
             AfeSensor&   _afe;
             AfeParser    _parser;                             // Solo lo usa _taskLoop
             FrameSink    _sink = nullptr;
+            SpO2Sink     _spo2Sink = nullptr;
             void*        _ctx = nullptr;
             ByteSource   _source = nullptr;
             volatile uint32_t _frames = 0;                    
