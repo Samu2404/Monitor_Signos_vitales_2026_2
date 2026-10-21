@@ -77,6 +77,36 @@ bool AlarmManager::hasActiveAlarms() const {
 }
 
 // ========================================
+// PRIORIDAD MAS ALTA ACTIVA
+// ========================================
+
+AlarmPriority AlarmManager::highestPriority() const {
+
+    AlarmPriority result = AlarmPriority::NONE;
+
+    for (uint8_t i = 0; i < 7; i++) {
+
+        if (alarmStates_[i] != '1') {
+            continue;
+        }
+
+        switch (static_cast<AlarmType>(i)) {
+
+            case AlarmType::HR_HIGH:
+            case AlarmType::HR_LOW:
+            case AlarmType::SPO2_LOW:
+                return AlarmPriority::CRITICAL;   // No hay nada mas alto
+
+            default:
+                result = AlarmPriority::MEDIUM;
+                break;
+        }
+    }
+
+    return result;
+}
+
+// ========================================
 // OBTENER TEXTO BLE
 // ========================================
 
