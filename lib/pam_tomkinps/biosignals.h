@@ -308,6 +308,24 @@ void bp_start_calibration(BpEstimator* b, float sbp, float dbp);
 /* Modelo de presión con la calibración actual (útil para probarlo aislado). */
 void bp_model(const BpEstimator* b, float ptt_ms, float pir, float* sbp, float* dbp);
 
+/* ================= SpO2 a partir de los parámetros del AFE4950 ==========
+ * El AFE entrega una vez por segundo ESTADO y AC/DC de los canales IR y RED.
+ *   R    = (AC_RED / DC_RED) / (AC_IR / DC_IR)
+ *   SpO2 = SPO2_CAL_A - SPO2_CAL_B * R            (curva empírica del readme)
+ * Solo se calcula con ESTADO = SPO2_STATE_VALID. Un resultado bajo
+ * SPO2_MIN_PCT se toma como señal mala (0 = sin dato); sobre SPO2_MAX_PCT
+ * se acota a SPO2_MAX_PCT. El resultado se redondea a 0.1 %. */
+#define SPO2_STATE_VALID  2        /* 0 = sin señal, 1 = estabilizando, 2 = válida */
+#define SPO2_CAL_A        110.0f
+#define SPO2_CAL_B        25.0f
+#define SPO2_MIN_PCT      80.0f    /* por debajo: se descarta (devuelve 0) */
+#define SPO2_MAX_PCT      100.0f   /* por encima: se acota */
+
+/* Devuelve la SpO2 [%] o 0 si no es válida (estado distinto de 2, algún AC o
+ * DC en 0, o resultado menor que SPO2_MIN_PCT). AC/DC en cuentas (24 bits). */
+float spo2_from_params(uint8_t state, uint32_t ac_ir, uint32_t dc_ir,
+                       uint32_t ac_red, uint32_t dc_red);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
