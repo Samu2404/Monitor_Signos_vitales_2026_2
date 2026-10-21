@@ -24,5 +24,8 @@ class AfeSensor {
 
     private:
         AFE4950 _afe;
+        const uint8_t* _pkt;
+        size_t _pktLen;
+        size_t _pktPos;
         bool _ready = false;
 };

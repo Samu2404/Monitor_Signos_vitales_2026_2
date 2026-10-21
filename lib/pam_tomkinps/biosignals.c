@@ -740,3 +740,19 @@ BP_Result bp_on_beat(BpEstimator* b) {
 }
 
 
+/* ================= SpO2 ================= */
+float spo2_from_params(uint8_t state, uint32_t ac_ir, uint32_t dc_ir,
+                       uint32_t ac_red, uint32_t dc_red) {
+    if (state != SPO2_STATE_VALID) return 0.0f;
+    if (ac_ir == 0u || dc_ir == 0u || ac_red == 0u || dc_red == 0u) return 0.0f;
+
+    /* R = (AC_RED/DC_RED)/(AC_IR/DC_IR) = (AC_RED*DC_IR)/(DC_RED*AC_IR).
+     * En float: los productos de 24 bits (hasta 2^48) no desbordan. */
+    float r    = ((float)ac_red * (float)dc_ir) / ((float)dc_red * (float)ac_ir);
+    float spo2 = SPO2_CAL_A - SPO2_CAL_B * r;
+    spo2 = roundf(spo2 * 10.0f) / 10.0f;           /* resolución 0.1 %: evita que 79.99999 (error de float) quede bajo el límite */
+
+    if (spo2 < SPO2_MIN_PCT) return 0.0f;          /* señal mala, no hipoxemia */
+    if (spo2 > SPO2_MAX_PCT) spo2 = SPO2_MAX_PCT;
+    return spo2;
+}

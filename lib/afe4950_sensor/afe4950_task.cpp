@@ -31,6 +31,7 @@ void AfeTask :: _taskEntry (void* self) {
 
 void AfeTask :: _taskLoop(){
     AfeParser::Frame f;
+    AfeParser::SpO2Params p;
     uint8_t b;
     TickType_t xLastWakeTime = xTaskGetTickCount();
     for (;;) {
@@ -43,6 +44,9 @@ void AfeTask :: _taskLoop(){
                     _sink(f, _ctx);
                 }
             }
+        }
+        if (_parser.takeSpO2(p) && _spo2Sink) {
+            _spo2Sink(p, _ctx);
         }
     }
 }
