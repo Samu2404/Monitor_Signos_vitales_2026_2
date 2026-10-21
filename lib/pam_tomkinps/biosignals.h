@@ -305,6 +305,9 @@ BP_Result bp_on_beat(BpEstimator* b);
 /* Inicia la calibración con la medida del tensiómetro (paciente quieto ~30 s). */
 void bp_start_calibration(BpEstimator* b, float sbp, float dbp);
 
+/* Anula la calibración y el promedio (p. ej. al perder la señal) */
+void bp_cancel_calibration(BpEstimator* b);
+
 /* Modelo de presión con la calibración actual (útil para probarlo aislado). */
 void bp_model(const BpEstimator* b, float ptt_ms, float pir, float* sbp, float* dbp);
 

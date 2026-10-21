@@ -589,7 +589,17 @@ void bp_push_ppg(BpEstimator* b, int32_t sample) {
     b->n_ppg++;
 }
 
+/* Vacía el promedio de latidos: sin esto, el filtro de artefactos compara contra el
+ * PTT de antes de perder la señal y, si cambió más de BP_ARTIFACT_FRAC, rechaza todo. */
+static void bp_reset_average(BpEstimator* b) {
+    b->n_prom  = 0;
+    b->i_prom  = 0;
+    b->ptt_avg = 0.0f;
+    b->pir_avg = 0.0f;
+}
+
 void bp_start_calibration(BpEstimator* b, float sbp, float dbp) {
+    bp_reset_average(b);
     b->sbp0 = sbp;
     b->dbp0 = dbp;
     b->sum_ptt = 0.0f;
@@ -597,6 +607,12 @@ void bp_start_calibration(BpEstimator* b, float sbp, float dbp) {
     b->n_cal = 0;
     b->calibrated  = false;
     b->calibrating = true;
+}
+
+void bp_cancel_calibration(BpEstimator* b) {
+    bp_reset_average(b);
+    b->calibrated  = false;
+    b->calibrating = false;
 }
 
 void bp_model(const BpEstimator* b, float ptt_ms, float pir, float* sbp, float* dbp) {

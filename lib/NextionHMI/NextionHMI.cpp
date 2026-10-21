@@ -274,6 +274,7 @@ void NextionHMI::_taskLoop() {
         }
         _listen();
         _flushVitals();
+        _flushSlow();
     }
 }
 
@@ -288,7 +289,12 @@ void NextionHMI::_handle(const msg& m) {
             break;
         }
         case msg::Num :
-            if (m.id < ValCount) {
+            if (m.id >= ValCount) {
+                break;
+            }
+            if (_isSlow(static_cast<ValueId>(m.id))) {
+                _pushSlow(static_cast<ValueId>(m.id), m.value);
+            } else {
                 _setNum(static_cast<ValueId>(m.id), m.value);
             }
             break;
@@ -358,6 +364,32 @@ void NextionHMI::_updateWave(uint8_t id, uint8_t channel, uint32_t value) {
     // Avanza un periodo exacto para no acumular deriva; si se atrasó mucho, resincroniza
     wave->lastTime = (elapsed >= 2 * wave->period) ? now : wave->lastTime + wave->period;
     _sendWave(id, channel, value, wave->mapValue);
+}
+
+void NextionHMI::_pushSlow(ValueId slot, int32_t value) {
+    if (value == 0 || _wanted[slot] == 0 || _wanted[slot] == Unknown) {
+        _slow[slot] = {};            // Pérdida o primer valor: no se espera a la ventana
+        _setNum(slot, value);
+        return;
+    }
+    _slow[slot].sum += value;
+    _slow[slot].count++;
+}
+
+void NextionHMI::_flushSlow() {
+    uint32_t now = millis();
+    if (now - _slowTime < SlowPeriodMs) {
+        return;
+    }
+    _slowTime = now;
+    for (uint8_t i = 0; i < ValCount; i++) {
+        SlowAvg& s = _slow[i];
+        if (s.count == 0) {
+            continue;
+        }
+        _setNum(static_cast<ValueId>(i), (s.sum + s.count / 2) / s.count);   // Promedio redondeado
+        s = {};
+    }
 }
 
 void NextionHMI::_flushVitals() {

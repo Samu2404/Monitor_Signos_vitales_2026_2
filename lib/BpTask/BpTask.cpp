@@ -52,8 +52,7 @@ void BpTask::onBeat() {
         xSemaphoreGive(_mutex);
     }
     if (lost && !calReq) {
-        _bp.calibrated  = false;                 // Se perdió la señal: la calibración ya no vale
-        _bp.calibrating = false;
+        bp_cancel_calibration(&_bp);             // Se perdió la señal: la calibración ya no vale
     }
     if (calReq) {
         bp_start_calibration(&_bp, sbp, dbp);

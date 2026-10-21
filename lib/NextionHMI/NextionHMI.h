@@ -158,6 +158,7 @@ private:
     static constexpr uint8_t  MaxWaveforms   = 4;   // Gráficas simultáneas que se pueden registrar
     static constexpr uint32_t ValuesPeriodMs = 250; // Periodo mínimo entre revisiones de updateValues()
     static constexpr uint32_t DefaultMapValue = 4096; // MapValue por defecto (ADC de 12 bits)
+    static constexpr uint32_t SlowPeriodMs   = 2000; // HR, PR y SpO2: se muestra el promedio de cada ventana
 
     // Identificador de cada valor numérico dentro de la caché
     enum ValueId : uint8_t { ValSpO2, ValBPM, ValPulseRate, ValHRV, ValTemperature, ValRespiration, ValSistolica, ValDiastolica, ValCalState, ValCalProgress, ValCount };
@@ -216,6 +217,14 @@ private:
     void _enqueueNum(ValueId slot, int32_t value);
 
     void _flushVitals();
+
+    // Valores que cambian con cada latido: se promedian para que la pantalla no parpadee
+    struct SlowAvg { int32_t sum; uint16_t count; };
+    static bool _isSlow(ValueId slot) { return slot == ValSpO2 || slot == ValBPM || slot == ValPulseRate; }
+    void _pushSlow(ValueId slot, int32_t value);   // Acumula; 0 (pérdida) y el primer valor se muestran ya
+    void _flushSlow();                             // Cada SlowPeriodMs muestra el promedio acumulado
+    SlowAvg _slow[ValCount] = {};
+    uint32_t _slowTime = 0;
     QueueHandle_t _vitalsBox = nullptr;
     struct CalRequest {        int sbp;        int dbp;    };
     QueueHandle_t _calBox = nullptr;
