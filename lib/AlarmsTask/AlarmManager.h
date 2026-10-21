@@ -22,6 +22,16 @@ enum class AlarmType : uint8_t {
 };
 
 // ========================================
+// PRIORIDAD DE ALARMA (define el sonido del buzzer)
+// ========================================
+
+enum class AlarmPriority : uint8_t {
+    NONE     = 0,     // Silencio
+    MEDIUM   = 1,     // Temperatura, electrodos, batería: 3 pitidos lentos cada ~5 s
+    CRITICAL = 2      // FC y SpO2: 3 + 2 pitidos rápidos cada ~2,5 s
+};
+
+// ========================================
 // CLASE ALARM MANAGER
 // ========================================
 
@@ -36,6 +46,9 @@ public:
     bool isActive(AlarmType alarm) const;
 
     bool hasActiveAlarms() const;
+
+    // Prioridad más alta entre las alarmas activas
+    AlarmPriority highestPriority() const;
 
     const char* getAlarmString() const;
 
