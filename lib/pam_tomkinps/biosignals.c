@@ -631,12 +631,12 @@ static uint32_t bp_ecg_to_ppg(const BpEstimator* b, uint32_t i_ecg) {
 }
 
 /* Paso 5: PTT y PIR del latido que empieza en R (índice ECG) y termina en r_next.
- * Devuelve false si el latido no sirve. */
-static bool bp_measure_beat(const BpEstimator* b, uint32_t R, uint32_t r_next,
+ * Devuelve BP_OK o el motivo BP_REJ_* por el que el latido no sirve. */
+static uint8_t bp_measure_beat(const BpEstimator* b, uint32_t R, uint32_t r_next,
                             float* ptt_ms, float* pir) {
     float rr_ms = (float)(r_next - R) * 1000.0f / b->fs_ecg;
     if (rr_ms < 333.0f || rr_ms > 2000.0f) {
-        return false;                              /* RR imposible (fuera de 30–180 lpm) */
+        return BP_REJ_RR;                          /* RR imposible (fuera de 30–180 lpm) */
     }
 
     /* 5a. Subida más rápida del pulso en [R+100, R+500] ms (sin pasar del R siguiente).
@@ -649,7 +649,7 @@ static bool bp_measure_beat(const BpEstimator* b, uint32_t R, uint32_t r_next,
     if (fin > p_next)                  fin = p_next;
     if (fin + h >= b->n_ppg)           fin = b->n_ppg - 1 - h;   /* aún no llegan esas muestras */
     if (ini < (uint32_t)h || ini >= fin) {
-        return false;
+        return BP_REJ_WINDOW;
     }
 
     uint32_t k = ini;
@@ -659,7 +659,7 @@ static bool bp_measure_beat(const BpEstimator* b, uint32_t R, uint32_t r_next,
         if (pend > mejor) { mejor = pend; k = i; }
     }
     if (mejor <= 0) {
-        return false;                              /* no hubo subida */
+        return BP_REJ_SLOPE;                       /* no hubo subida */
     }
 
     /* 5b. PTT */
@@ -679,19 +679,19 @@ static bool bp_measure_beat(const BpEstimator* b, uint32_t R, uint32_t r_next,
             if (BP_PPG(b, i) < il) il = BP_PPG(b, i);
         }
         if (il <= 0) {
-            return false;                          /* sin nivel DC válido */
+            return BP_REJ_DC;                      /* sin nivel DC válido */
         }
         *pir = (float)ih / (float)il;
     }
-    return true;
+    return BP_OK;
 }
 
 /* Paso 6: revisar, promediar y (pasos 7 y 8) calibrar o estimar la presión */
-static bool bp_review(BpEstimator* b, float ptt, float pir, BP_Result* r) {
-    if (ptt < BP_PTT_MIN_MS || ptt > BP_PTT_MAX_MS) return false;          /* fuera de rango */
-    if (b->use_pir && (pir <= 1.0f || pir > BP_PIR_MAX)) return false;
+static uint8_t bp_review(BpEstimator* b, float ptt, float pir, BP_Result* r) {
+    if (ptt < BP_PTT_MIN_MS || ptt > BP_PTT_MAX_MS) return BP_REJ_PTT;     /* fuera de rango */
+    if (b->use_pir && (pir <= 1.0f || pir > BP_PIR_MAX)) return BP_REJ_PIR;
     if (b->n_prom == BP_NPROM && fabsf(ptt - b->ptt_avg) > BP_ARTIFACT_FRAC * b->ptt_avg) {
-        return false;                                                       /* artefacto */
+        return BP_REJ_ARTIFACT;                                             /* artefacto */
     }
 
     b->ptt_hist[b->i_prom] = ptt;
@@ -717,12 +717,13 @@ static bool bp_review(BpEstimator* b, float ptt, float pir, BP_Result* r) {
     if (b->calibrated) {
         bp_model(b, b->ptt_avg, b->pir_avg, &r->sbp, &r->dbp);
     }
-    return true;
+    return BP_OK;
 }
 
 BP_Result bp_on_beat(BpEstimator* b) {
     BP_Result r;
     memset(&r, 0, sizeof(r));
+    r.reject = BP_REJ_STARTUP;
 
     /* Paso 4: el pico R real es el máximo del ECG antes del aviso del Pan-Tompkins */
     uint32_t m = b->n_ecg - 1;
@@ -739,11 +740,13 @@ BP_Result bp_on_beat(BpEstimator* b) {
         if (BP_ECG(b, i) > BP_ECG(b, R)) R = i;
     }
 
-    float ptt, pir;
-    if (b->has_r && bp_measure_beat(b, b->r_prev, R, &ptt, &pir)) {
+    float ptt = 0.0f, pir = 0.0f;
+    r.reject = b->has_r ? bp_measure_beat(b, b->r_prev, R, &ptt, &pir) : BP_REJ_FIRST;
+    if (r.reject == BP_OK) {
         r.ptt_ms = ptt;
         r.pir    = pir;
-        r.beat   = bp_review(b, ptt, pir, &r);
+        r.reject = bp_review(b, ptt, pir, &r);
+        r.beat   = r.reject == BP_OK;
     }
     b->r_prev = R;
     b->has_r  = true;

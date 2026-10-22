@@ -46,6 +46,8 @@ public:
     bool startCalibration(float sbp, float dbp);
 
     /** @brief Si no hay latidos aceptados en StaleMs, borra la presión de la pantalla.
+     *  La calibración solo se pierde si el ECG deja de dar latidos en StaleMs (señal perdida);
+     *  latidos rechazados por la revisión de PTT/PIR solo detienen el progreso.
      *  @note Llamarlo periódicamente desde loop() (BpTask no tiene tarea propia)
      */
     void checkTimeout();
@@ -65,7 +67,15 @@ private:
     bool  _calRequest = false;       // Pedido de calibración pendiente; protegido por _mutex
     float _calSbp = 0.0f, _calDbp = 0.0f;
     uint32_t _beats = 0;
-    bool _lostRequest= false;         
+    uint32_t _lastEcgBeatMs = 0;     // Último latido del ECG (aceptado o no por bp); protegido por _mutex
+    bool _lostRequest= false;
     bool _shown= false;
+
+    // Depuración (BP_DEBUG): los escribe onBeat y los lee loop sin mutex; basta para un resumen
+    uint32_t _dbgBeats = 0;                    // Avisos de latido desde el último pedido de calibración
+    uint32_t _dbgReject[BP_REJ_COUNT] = {};    // Por motivo; _dbgReject[BP_OK] = aceptados
+    float    _dbgPtt = 0.0f, _dbgPir = 0.0f;   // Último latido medido (aceptado o no)
+    int32_t  _dbgPpgMin = INT32_MAX, _dbgPpgMax = INT32_MIN;   // PPG crudo desde el último resumen
+    void _debugPrint();
 
 };

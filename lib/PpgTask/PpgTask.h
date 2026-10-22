@@ -48,7 +48,7 @@ class PpgTask {
         static constexpr uint8_t analogPin= 35;
         static constexpr uint8_t SamplePeriodMs= 4;
         static constexpr float ADCsampleRateHz = 1000.0f/SamplePeriodMs;   // 250 Hz
-        static constexpr uint16_t GraphDecimation= 8;   // Muestras por ventana: 2·250/8 = 62 puntos/s en la gráfica
+        static constexpr uint16_t GraphDecimation= 4;   // Muestras por ventana: 2·250/8 = 62 puntos/s en la gráfica
         static constexpr uint8_t GraphId= 2;
         static constexpr uint8_t GraphChannel= 0;
         static constexpr float GraphMinAmp = 20.0f; // Amplitud minima de la grafica

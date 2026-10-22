@@ -259,6 +259,21 @@ uint32_t pt_beats(const PanTompkins* pt);   /* latidos detectados             */
 #define BP_PIR_MAX        1.3f
 #define BP_ARTIFACT_FRAC  0.2f     /* salto máximo del PTT respecto al promedio */
 
+/* Motivo por el que un aviso de latido no dio un latido aceptado (BP_Result.reject) */
+enum {
+    BP_OK = 0,
+    BP_REJ_STARTUP,     /* aún no hay 500 ms de ECG */
+    BP_REJ_FIRST,       /* primer R: falta el anterior */
+    BP_REJ_RR,          /* RR fuera de 333–2000 ms */
+    BP_REJ_WINDOW,      /* no hay muestras de PPG en la ventana de búsqueda */
+    BP_REJ_SLOPE,       /* el PPG no tuvo subida en la ventana */
+    BP_REJ_DC,          /* luz mínima <= 0 (PIR imposible) */
+    BP_REJ_PTT,         /* PTT fuera de BP_PTT_MIN_MS..BP_PTT_MAX_MS */
+    BP_REJ_PIR,         /* PIR fuera de (1, BP_PIR_MAX] */
+    BP_REJ_ARTIFACT,    /* PTT lejos del promedio */
+    BP_REJ_COUNT
+};
+
 typedef struct {
     bool  beat;           /* true si en este aviso se aceptó un latido (los demás campos son válidos) */
     float ptt_ms;         /* PTT del latido */
@@ -269,6 +284,7 @@ typedef struct {
     bool  calibrated;     /* hay PTT0/PIR0: sbp y dbp son válidos */
     bool  cal_done;       /* true SOLO en el latido que termina la calibración */
     float sbp, dbp;       /* presión estimada [mmHg] (si calibrated) */
+    uint8_t reject;       /* BP_OK o el motivo BP_REJ_* si beat == false */
 } BP_Result;
 
 typedef struct {

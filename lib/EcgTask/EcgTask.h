@@ -40,7 +40,7 @@ public:
 private:
     
     static constexpr uint8_t analogPin= 34;
-    static constexpr uint16_t GraphDecimation = 3;   // 2·500/8 = 125 puntos/s en la gráfica
+    static constexpr uint16_t GraphDecimation = 4;   // 2·500/8 = 125 puntos/s en la gráfica
     static constexpr uint8_t GraphId= 1;
     static constexpr uint8_t GraphChannel= 0;
     static constexpr uint8_t SamplePeriodMs= 2;
