@@ -4,6 +4,9 @@
 // PATRONES DE SONIDO
 // ========================================
 
+// Leve: 1 pitido corto y pausa muy larga
+static const uint16_t MinorSteps[] = {150, 14850};
+
 // Media: 3 pitidos de 200 ms y pausa larga
 static const uint16_t MediumSteps[] = {200, 200, 200, 200, 200, 4800};
 
@@ -110,9 +113,18 @@ void AlarmBuzzer::_taskLoop() {
             continue;
         }
 
-        Pattern pat = (p == AlarmPriority::CRITICAL)
-            ? Pattern{HighSteps,   sizeof(HighSteps)   / sizeof(HighSteps[0]),   ToneHighHz}
-            : Pattern{MediumSteps, sizeof(MediumSteps) / sizeof(MediumSteps[0]), ToneMediumHz};
+        Pattern pat;
+        switch (p) {
+            case AlarmPriority::CRITICAL:
+                pat = {HighSteps,   sizeof(HighSteps)   / sizeof(HighSteps[0]),   ToneHighHz};
+                break;
+            case AlarmPriority::MEDIUM:
+                pat = {MediumSteps, sizeof(MediumSteps) / sizeof(MediumSteps[0]), ToneMediumHz};
+                break;
+            default:
+                pat = {MinorSteps,  sizeof(MinorSteps)  / sizeof(MinorSteps[0]),  ToneMinorHz};
+                break;
+        }
 
         for (uint8_t i = 0; i < pat.count; i++) {
             bool on = (i % 2) == 0;             // Pasos pares = pitido, impares = pausa

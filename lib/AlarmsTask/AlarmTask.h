@@ -4,20 +4,21 @@
 #include "AlarmRule.h"
 #include "AlarmManager.h"
 #include "AlarmBuzzer.h"
+#include "AlarmLeds.h"
 #include "EcgTask.h"
 #include "PpgTask.h"
 #include "BpTask.h"
 
 /**
- * @brief Tarea de alarmas: cada 1 s reúne los signos vitales, evalúa las reglas
- *        y hace sonar el buzzer según la prioridad activa.
+ * @brief Tarea de alarmas: cada 1 s reúne los signos vitales, evalúa las reglas,
+ *        hace sonar el buzzer y enciende el LED según la prioridad activa.
  *
  * Es independiente de BLE: el buzzer suena aunque BLE no arranque.
  * BLETask solo lee getSnapshot() para publicar.
  */
 class AlarmTask {
 public:
-    AlarmTask(EcgTask& ecg, PpgTask& ppg, BpTask& bp, AlarmBuzzer& buzzer);
+    AlarmTask(EcgTask& ecg, PpgTask& ppg, BpTask& bp, AlarmBuzzer& buzzer, AlarmLeds& leds);
 
     bool begin();
 
@@ -53,6 +54,7 @@ private:
     PpgTask&     _ppg;
     BpTask&      _bp;
     AlarmBuzzer& _buzzer;
+    AlarmLeds&   _leds;
     AlarmManager _alarms;
 
     Snapshot _snapshot = {};

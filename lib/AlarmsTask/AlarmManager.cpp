@@ -97,8 +97,12 @@ AlarmPriority AlarmManager::highestPriority() const {
             case AlarmType::SPO2_LOW:
                 return AlarmPriority::CRITICAL;   // No hay nada mas alto
 
-            default:
+            case AlarmType::TEMP_HIGH:
+            case AlarmType::TEMP_LOW:
                 result = AlarmPriority::MEDIUM;
+                break;
+
+            default:                              // Posiciones libres: nunca se activan
                 break;
         }
     }

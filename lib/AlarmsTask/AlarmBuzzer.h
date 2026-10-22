@@ -38,6 +38,7 @@ public:
 private:
     static constexpr uint8_t  LedcChannel   = 4;      // Canal LEDC libre
     static constexpr uint8_t  LedcBits      = 8;
+    static constexpr uint32_t ToneMinorHz   = 1000;   // Tono suave para prioridad leve
     static constexpr uint32_t ToneMediumHz  = 1500;   // Tono más grave para prioridad media
     static constexpr uint32_t ToneHighHz    = 2700;   // Tono agudo (resonancia típica de buzzers)
 

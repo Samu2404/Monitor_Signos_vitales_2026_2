@@ -2,8 +2,8 @@
 #include <math.h>
 #include <string.h>
 
-AlarmTask::AlarmTask(EcgTask& ecg, PpgTask& ppg, BpTask& bp, AlarmBuzzer& buzzer)
-    : _ecg(ecg), _ppg(ppg), _bp(bp), _buzzer(buzzer) {
+AlarmTask::AlarmTask(EcgTask& ecg, PpgTask& ppg, BpTask& bp, AlarmBuzzer& buzzer, AlarmLeds& leds)
+    : _ecg(ecg), _ppg(ppg), _bp(bp), _buzzer(buzzer), _leds(leds) {
     memcpy(_snapshot.alarms, _alarms.getAlarmString(), sizeof(_snapshot.alarms));
 }
 
@@ -12,6 +12,7 @@ bool AlarmTask::begin() {
     if (_mutex == nullptr) {
         return false;
     }
+    _leds.begin();                      // Verde desde el arranque
     if (!_buzzer.begin()) {
         return false;
     }
@@ -40,7 +41,9 @@ void AlarmTask::_taskLoop() {
 
         VitalSigns v = _source ? _source() : _collect();   // 1. Reúne los datos de ECG, PPG y BP
         _evaluateAlarms(v);                                 // 2. Evalúa las reglas de alarma
-        _buzzer.setPriority(_alarms.highestPriority());     // 3. Suena / calla según las alarmas
+        AlarmPriority prio = _alarms.highestPriority();
+        _buzzer.setPriority(prio);                          // 3. Suena / calla según las alarmas
+        _leds.show(prio);                                   //    y enciende el LED de esa gravedad
 
         xSemaphoreTake(_mutex, portMAX_DELAY);              // 4. Deja la copia para BLETask
         _snapshot.vitals = v;
