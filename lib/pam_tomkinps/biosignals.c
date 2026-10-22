@@ -775,3 +775,26 @@ float spo2_from_params(uint8_t state, uint32_t ac_ir, uint32_t dc_ir,
     if (spo2 > SPO2_MAX_PCT) spo2 = SPO2_MAX_PCT;
     return spo2;
 }
+
+/* ================= Temperatura con termistor YSI 400 ===================== */
+float ysi400_r_from_mv(float mv) {
+    if (mv < TEMP_ADC_MIN_MV || mv > TEMP_ADC_MAX_MV) return 0.0f;   /* amplificador saturado */
+    const float va = TEMP_BRIDGE_VEXC_MV * TEMP_BRIDGE_R2_OHM
+                   / (TEMP_BRIDGE_R1_OHM + TEMP_BRIDGE_R2_OHM);
+    float vb = va - (mv - TEMP_AMP_VREF_MV) / TEMP_AMP_GAIN;
+    if (vb <= 0.0f || vb >= TEMP_BRIDGE_VEXC_MV) return 0.0f;   /* corto o sonda suelta */
+    return TEMP_BRIDGE_R3_OHM * vb / (TEMP_BRIDGE_VEXC_MV - vb);
+}
+
+float ysi400_temp_from_r(float r_ohm) {
+    if (r_ohm <= 0.0f) return NAN;
+    float x     = logf(r_ohm / YSI400_R25_OHM);
+    float inv_t = YSI400_A + YSI400_B * x + YSI400_C * x * x;
+    return 1.0f / inv_t - 273.15f;
+}
+
+float ysi400_temp_from_mv(float mv) {
+    float t = ysi400_temp_from_r(ysi400_r_from_mv(mv));
+    if (!(t >= TEMP_MIN_C && t <= TEMP_MAX_C)) return 0.0f;   /* también descarta NAN */
+    return t;
+}

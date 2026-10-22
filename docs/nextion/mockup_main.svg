@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <clipPath id="ecgClip"><rect x="0" y="64" width="558" height="170"/></clipPath>
+    <clipPath id="plClip"><rect x="0" y="260" width="558" height="170"/></clipPath>
+    <path id="ecgBeat" d="M0,0 L20,0 Q27,-10 34,0 L44,0 L48,8 L54,-78 L60,22 L64,0 L76,0 Q88,-22 100,0 L120,0" fill="none" stroke="#5DCAA5" stroke-width="2" stroke-linejoin="round"/>
+    <path id="plBeat" d="M0,0 C15,0 20,-70 35,-75 C50,-78 55,-40 65,-35 C72,-32 75,-42 82,-40 C95,-36 105,-5 120,0" fill="none" stroke="#85B7EB" stroke-width="2" stroke-linejoin="round"/>
+  </defs>
+
+  <!-- Fondo de la página (bco 2146) -->
+  <rect width="800" height="480" fill="#0B0F14"/>
+
+  <!-- Barra de estado -->
+  <rect x="0" y="0" width="128" height="40" fill="#151C24"/>
+  <text x="64" y="20" font-size="20" fill="#D8DEE6" text-anchor="middle" dominant-baseline="central">Adulto</text>
+  <rect x="128" y="0" width="420" height="40" fill="#A32D2D"/>
+  <text x="338" y="20" font-size="24" font-weight="bold" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">FC alta 132 lpm</text>
+  <rect x="548" y="0" width="92" height="40" fill="#151C24"/>
+  <polygon points="562,15 567,15 573,10 573,30 567,25 562,25" fill="#FAC775"/>
+  <line x1="577" y1="14" x2="587" y2="26" stroke="#FAC775" stroke-width="2"/>
+  <line x1="587" y1="14" x2="577" y2="26" stroke="#FAC775" stroke-width="2"/>
+  <text x="612" y="20" font-size="20" fill="#FAC775" text-anchor="middle" dominant-baseline="central">1:45</text>
+  <rect x="640" y="0" width="60" height="40" fill="#151C24"/>
+  <text x="670" y="20" font-size="20" fill="#85B7EB" text-anchor="middle" dominant-baseline="central">BLE</text>
+  <rect x="700" y="0" width="100" height="40" fill="#151C24"/>
+  <text x="750" y="20" font-size="20" fill="#D8DEE6" text-anchor="middle" dominant-baseline="central">14:32</text>
+
+  <!-- Onda ECG (s0) -->
+  <text x="8" y="52" font-size="16" fill="#5DCAA5" dominant-baseline="central">ECG II   ×1</text>
+  <g clip-path="url(#ecgClip)">
+    <use href="#ecgBeat" x="0" y="185"/>
+    <use href="#ecgBeat" x="120" y="185"/>
+    <use href="#ecgBeat" x="240" y="185"/>
+    <use href="#ecgBeat" x="360" y="185"/>
+    <use href="#ecgBeat" x="480" y="185"/>
+  </g>
+
+  <!-- Onda Pleth (s1) -->
+  <text x="8" y="248" font-size="16" fill="#85B7EB" dominant-baseline="central">Pleth</text>
+  <g clip-path="url(#plClip)">
+    <use href="#plBeat" x="-30" y="400"/>
+    <use href="#plBeat" x="90" y="400"/>
+    <use href="#plBeat" x="210" y="400"/>
+    <use href="#plBeat" x="330" y="400"/>
+    <use href="#plBeat" x="450" y="400"/>
+  </g>
+
+  <!-- Recuadro FC (en alarma: franja y número en rojo) -->
+  <rect x="560" y="40" width="4" height="120" fill="#E24B4A"/>
+  <text x="570" y="56" font-size="20" fill="#5DCAA5" dominant-baseline="central">FC</text>
+  <text x="790" y="56" font-size="16" fill="#5DCAA5" text-anchor="end" dominant-baseline="central">lpm</text>
+  <text x="570" y="86" font-size="16" fill="#5DCAA5" dominant-baseline="central">120</text>
+  <text x="570" y="138" font-size="16" fill="#5DCAA5" dominant-baseline="central">50</text>
+  <text x="790" y="114" font-size="68" font-weight="bold" fill="#F09595" text-anchor="end" dominant-baseline="central">132</text>
+
+  <!-- Recuadro SpO2 + PR -->
+  <rect x="560" y="160" width="4" height="120" fill="#85B7EB"/>
+  <text x="570" y="176" font-size="20" fill="#85B7EB" dominant-baseline="central">SpO2</text>
+  <text x="790" y="176" font-size="16" fill="#85B7EB" text-anchor="end" dominant-baseline="central">%</text>
+  <text x="570" y="240" font-size="16" fill="#85B7EB" dominant-baseline="central">90</text>
+  <text x="790" y="224" font-size="68" font-weight="bold" fill="#85B7EB" text-anchor="end" dominant-baseline="central">97</text>
+  <text x="570" y="268" font-size="16" fill="#85B7EB" dominant-baseline="central">PR</text>
+  <text x="790" y="267" font-size="20" fill="#85B7EB" text-anchor="end" dominant-baseline="central">72</text>
+
+  <!-- Recuadro PA -->
+  <rect x="560" y="280" width="4" height="80" fill="#ED93B1"/>
+  <text x="570" y="294" font-size="16" fill="#ED93B1" dominant-baseline="central">PA mmHg (PTT)</text>
+  <text x="670" y="331" font-size="40" font-weight="bold" fill="#ED93B1" text-anchor="end" dominant-baseline="central">118</text>
+  <text x="680" y="331" font-size="40" font-weight="bold" fill="#ED93B1" text-anchor="middle" dominant-baseline="central">/</text>
+  <text x="690" y="331" font-size="40" font-weight="bold" fill="#ED93B1" dominant-baseline="central">76</text>
+
+  <!-- Recuadro Temperatura -->
+  <rect x="560" y="360" width="4" height="70" fill="#FAC775"/>
+  <text x="570" y="374" font-size="16" fill="#FAC775" dominant-baseline="central">Temp °C</text>
+  <text x="790" y="404" font-size="40" font-weight="bold" fill="#FAC775" text-anchor="end" dominant-baseline="central">36.8</text>
+
+  <!-- Líneas divisorias (Postinitialize: line ...) -->
+  <g stroke="#222B35" stroke-width="1">
+    <line x1="558.5" y1="40" x2="558.5" y2="429"/>
+    <line x1="559.5" y1="40" x2="559.5" y2="429"/>
+    <line x1="0" y1="235.5" x2="557" y2="235.5"/>
+    <line x1="560" y1="159.5" x2="800" y2="159.5"/>
+    <line x1="560" y1="279.5" x2="800" y2="279.5"/>
+    <line x1="560" y1="359.5" x2="800" y2="359.5"/>
+    <line x1="0" y1="429.5" x2="800" y2="429.5"/>
+  </g>
+
+  <!-- Teclas -->
+  <g font-size="20" text-anchor="middle" dominant-baseline="central">
+    <rect x="8" y="434" width="152" height="42" fill="#151C24"/>
+    <text x="84" y="455" fill="#EF9F27">Pausar audio</text>
+    <rect x="166" y="434" width="152" height="42" fill="#151C24"/>
+    <text x="242" y="455" fill="#D8DEE6">Reconocer</text>
+    <rect x="324" y="434" width="152" height="42" fill="#151C24"/>
+    <text x="400" y="455" fill="#D8DEE6">Ondas</text>
+    <rect x="482" y="434" width="152" height="42" fill="#151C24"/>
+    <text x="558" y="455" fill="#D8DEE6">Calibrar PA</text>
+    <rect x="640" y="434" width="152" height="42" fill="#151C24"/>
+    <text x="716" y="455" fill="#D8DEE6">Config</text>
+  </g>
+</svg>

@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480" font-family="Arial, Helvetica, sans-serif">
+  <!-- Fondo de la página (bco 2146) -->
+  <rect width="800" height="480" fill="#0B0F14"/>
+
+  <!-- Barra de estado (sin alarma activa) -->
+  <rect x="0" y="0" width="800" height="40" fill="#151C24"/>
+  <text x="64" y="20" font-size="20" fill="#D8DEE6" text-anchor="middle" dominant-baseline="central">Adulto</text>
+  <text x="338" y="20" font-size="24" font-weight="bold" fill="#D8DEE6" text-anchor="middle" dominant-baseline="central">Configuración · Alarmas</text>
+  <text x="670" y="20" font-size="20" fill="#85B7EB" text-anchor="middle" dominant-baseline="central">BLE</text>
+  <text x="750" y="20" font-size="20" fill="#D8DEE6" text-anchor="middle" dominant-baseline="central">14:32</text>
+
+  <!-- Pestañas (x=0, w=160, h=65) -->
+  <g font-size="20" dominant-baseline="central">
+    <rect x="0" y="40" width="160" height="65" fill="#1C2A38"/>
+    <rect x="0" y="40" width="4" height="65" fill="#378ADD"/>
+    <text x="20" y="72" fill="#FFFFFF">Alarmas</text>
+    <rect x="0" y="105" width="160" height="65" fill="#11171E"/>
+    <text x="20" y="137" fill="#D8DEE6">Paciente</text>
+    <rect x="0" y="170" width="160" height="65" fill="#11171E"/>
+    <text x="20" y="202" fill="#D8DEE6">Señales</text>
+    <rect x="0" y="235" width="160" height="65" fill="#11171E"/>
+    <text x="20" y="267" fill="#D8DEE6">Pantalla</text>
+    <rect x="0" y="300" width="160" height="65" fill="#11171E"/>
+    <text x="20" y="332" fill="#D8DEE6">Bluetooth</text>
+    <rect x="0" y="365" width="160" height="65" fill="#11171E"/>
+    <rect x="20" y="398" width="12" height="9" rx="1" fill="#8A96A3"/>
+    <path d="M22,398 V393 A4,4 0 0 1 30,393 V398" fill="none" stroke="#8A96A3" stroke-width="2"/>
+    <text x="40" y="397" fill="#8A96A3">Servicio</text>
+  </g>
+  <g stroke="#222B35" stroke-width="1">
+    <line x1="0" y1="104.5" x2="160" y2="104.5"/>
+    <line x1="0" y1="169.5" x2="160" y2="169.5"/>
+    <line x1="0" y1="234.5" x2="160" y2="234.5"/>
+    <line x1="0" y1="299.5" x2="160" y2="299.5"/>
+    <line x1="0" y1="364.5" x2="160" y2="364.5"/>
+  </g>
+
+  <!-- Encabezado de la tabla -->
+  <g font-size="16" fill="#8A96A3" dominant-baseline="central">
+    <text x="180" y="66">Parámetro</text>
+    <text x="365" y="66" text-anchor="middle">Activa</text>
+    <text x="510" y="66" text-anchor="middle">Límite bajo</text>
+    <text x="700" y="66" text-anchor="middle">Límite alto</text>
+  </g>
+
+  <!-- Separadores de filas (y = 90, 146, 202, 258, 314, 370) -->
+  <g stroke="#222B35" stroke-width="1">
+    <line x1="170" y1="90.5" x2="790" y2="90.5"/>
+    <line x1="170" y1="146.5" x2="790" y2="146.5"/>
+    <line x1="170" y1="202.5" x2="790" y2="202.5"/>
+    <line x1="170" y1="258.5" x2="790" y2="258.5"/>
+    <line x1="170" y1="314.5" x2="790" y2="314.5"/>
+    <line x1="170" y1="370.5" x2="790" y2="370.5"/>
+    <line x1="0" y1="429.5" x2="800" y2="429.5"/>
+  </g>
+
+  <!-- Nombres de fila -->
+  <g font-size="20" fill="#D8DEE6" dominant-baseline="central">
+    <text x="180" y="118">FC (lpm)</text>
+    <text x="180" y="174">SpO2 (%)</text>
+    <text x="180" y="230">Temp (°C)</text>
+    <text x="180" y="286">Sin señal</text>
+    <text x="180" y="342">Volumen</text>
+  </g>
+
+  <!-- Interruptores (Dual-state button 70x36) -->
+  <g font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">
+    <rect x="330" y="100" width="70" height="36" fill="#1D9E75"/><text x="365" y="118">ON</text>
+    <rect x="330" y="156" width="70" height="36" fill="#1D9E75"/><text x="365" y="174">ON</text>
+    <rect x="330" y="212" width="70" height="36" fill="#1D9E75"/><text x="365" y="230">ON</text>
+    <rect x="330" y="268" width="70" height="36" fill="#1D9E75"/><text x="365" y="286">ON</text>
+  </g>
+
+  <!-- Steppers: b- (48x40), valor (80x40), b+ (48x40) -->
+  <g font-size="24" font-weight="bold" text-anchor="middle" dominant-baseline="central">
+    <!-- FC -->
+    <rect x="420" y="98" width="48" height="40" fill="#3A4654"/><text x="444" y="118" fill="#FFFFFF">−</text>
+    <text x="510" y="118" fill="#D8DEE6">50</text>
+    <rect x="552" y="98" width="48" height="40" fill="#3A4654"/><text x="576" y="118" fill="#FFFFFF">+</text>
+    <rect x="610" y="98" width="48" height="40" fill="#3A4654"/><text x="634" y="118" fill="#FFFFFF">−</text>
+    <text x="700" y="118" fill="#D8DEE6">120</text>
+    <rect x="742" y="98" width="48" height="40" fill="#3A4654"/><text x="766" y="118" fill="#FFFFFF">+</text>
+    <!-- SpO2 -->
+    <rect x="420" y="154" width="48" height="40" fill="#3A4654"/><text x="444" y="174" fill="#FFFFFF">−</text>
+    <text x="510" y="174" fill="#D8DEE6">90</text>
+    <rect x="552" y="154" width="48" height="40" fill="#3A4654"/><text x="576" y="174" fill="#FFFFFF">+</text>
+    <text x="700" y="174" fill="#5A6672" font-weight="normal">—</text>
+    <!-- Temperatura (Xfloat) -->
+    <rect x="420" y="210" width="48" height="40" fill="#3A4654"/><text x="444" y="230" fill="#FFFFFF">−</text>
+    <text x="510" y="230" fill="#D8DEE6">35.0</text>
+    <rect x="552" y="210" width="48" height="40" fill="#3A4654"/><text x="576" y="230" fill="#FFFFFF">+</text>
+    <rect x="610" y="210" width="48" height="40" fill="#3A4654"/><text x="634" y="230" fill="#FFFFFF">−</text>
+    <text x="700" y="230" fill="#D8DEE6">38.0</text>
+    <rect x="742" y="210" width="48" height="40" fill="#3A4654"/><text x="766" y="230" fill="#FFFFFF">+</text>
+  </g>
+  <text x="420" y="286" font-size="16" fill="#8A96A3" dominant-baseline="central">Alarma técnica (ECG / PPG)</text>
+
+  <!-- Volumen (Slider 300x30, min 30) -->
+  <text x="420" y="342" font-size="16" fill="#8A96A3" dominant-baseline="central">30%</text>
+  <rect x="460" y="338" width="260" height="8" rx="4" fill="#3A4654"/>
+  <rect x="460" y="338" width="149" height="8" rx="4" fill="#378ADD"/>
+  <circle cx="609" cy="342" r="11" fill="#D8DEE6"/>
+  <text x="790" y="342" font-size="24" font-weight="bold" fill="#D8DEE6" text-anchor="end" dominant-baseline="central">70%</text>
+
+  <!-- Teclas -->
+  <g font-size="20" text-anchor="middle" dominant-baseline="central">
+    <rect x="8" y="434" width="152" height="42" fill="#151C24"/>
+    <text x="84" y="455" fill="#D8DEE6">Límites auto</text>
+    <rect x="166" y="434" width="152" height="42" fill="#151C24"/>
+    <text x="242" y="455" fill="#D8DEE6">Probar sonido</text>
+    <rect x="324" y="434" width="152" height="42" fill="#151C24"/>
+    <text x="400" y="455" fill="#D8DEE6">Por defecto</text>
+    <rect x="640" y="434" width="152" height="42" fill="#151C24"/>
+    <text x="716" y="455" fill="#85B7EB">Volver</text>
+  </g>
+</svg>

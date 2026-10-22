@@ -345,6 +345,46 @@ void bp_model(const BpEstimator* b, float ptt_ms, float pir, float* sbp, float* 
 float spo2_from_params(uint8_t state, uint32_t ac_ir, uint32_t dc_ir,
                        uint32_t ac_red, uint32_t dc_red);
 
+/* ================= Temperatura con termistor YSI 400 =====================
+ * El YSI 400 es un NTC de 2252 ohm a 25 °C. Va en un puente de Wheatstone
+ * seguido de un amplificador de instrumentación; el ADC mide su salida:
+ *          VEXC
+ *        ┌──┴──┐
+ *       R1     R3
+ *   Va ──┤     ├── Vb
+ *       R2    NTC
+ *        └──┬──┘
+ *          GND
+ *   Va   = VEXC · R2 / (R1 + R2)            (rama fija)
+ *   Vout = G · (Va − Vb) + VREF            (Va a IN+, Vb a IN−: sube con la temperatura)
+ * Despeje: Vb = Va − (Vout − VREF)/G,  R_ntc = R3 · Vb / (VEXC − Vb)
+ * Curva (Steinhart-Hart normalizada a R25), T en kelvin:
+ *   x = ln(R_ntc / R25)
+ *   1/T = A + B·x + C·x²
+ * Fuera de TEMP_MIN_C..TEMP_MAX_C se toma como sonda suelta o en corto (0 = sin dato). */
+#define YSI400_R25_OHM       2252.0f
+#define YSI400_A             3.354016e-3f
+#define YSI400_B             2.569850e-4f
+#define YSI400_C             3.585153e-6f
+
+/* TODO: valores provisorios; reemplazar por los del circuito (PDF) */
+#define TEMP_BRIDGE_VEXC_MV  3300.0f   /* excitación del puente */
+#define TEMP_BRIDGE_R1_OHM   2252.0f
+#define TEMP_BRIDGE_R2_OHM   2252.0f
+#define TEMP_BRIDGE_R3_OHM   2252.0f
+#define TEMP_AMP_GAIN        5.0f
+#define TEMP_AMP_VREF_MV     0.0f      /* tensión del pin REF del amplificador */
+
+#define TEMP_ADC_MIN_MV      50.0f     /* salida pegada a un riel: sonda suelta o en corto */
+#define TEMP_ADC_MAX_MV      3100.0f   /* tope del ADC con atenuación de 11 dB */
+
+#define TEMP_MIN_C           25.0f     /* por debajo: sonda suelta o fuera del cuerpo */
+#define TEMP_MAX_C           45.0f
+
+float ysi400_r_from_mv(float mv);          /* R del NTC [ohm] a partir de la salida del amplificador; 0 si es imposible o está en un riel */
+float ysi400_temp_from_r(float r_ohm);     /* temperatura [°C] sin acotar; NAN si r <= 0 */
+float ysi400_temp_from_mv(float mv);       /* temperatura [°C] o 0 si es inválida */
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
