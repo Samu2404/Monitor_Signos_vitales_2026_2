@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480" font-family="Arial, Helvetica, sans-serif">
+  <rect width="800" height="480" fill="#0B0F14"/>
+  <rect x="0" y="0" width="800" height="40" fill="#151C24"/>
+  <text x="64" y="20" font-size="20" fill="#D8DEE6" text-anchor="middle" dominant-baseline="central">Adulto</text>
+  <text x="338" y="20" font-size="24" font-weight="bold" fill="#D8DEE6" text-anchor="middle" dominant-baseline="central">Calibración de PA</text>
+  <text x="670" y="20" font-size="20" fill="#85B7EB" text-anchor="middle" dominant-baseline="central">BLE</text>
+  <text x="750" y="20" font-size="20" fill="#D8DEE6" text-anchor="middle" dominant-baseline="central">14:32</text>
+  <text x="24" y="64" font-size="20" fill="#ED93B1" dominant-baseline="central">Sistólica (mmHg)</text>
+  <rect x="24" y="80" width="352" height="88" fill="#1C2A38"/>
+  <rect x="24" y="80" width="4" height="88" fill="#ED93B1"/>
+  <text x="200" y="124" font-size="68" font-weight="bold" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">120</text>
+  <text x="24" y="196" font-size="20" fill="#ED93B1" dominant-baseline="central">Diastólica (mmHg)</text>
+  <rect x="24" y="212" width="352" height="88" fill="#151C24"/>
+  <text x="200" y="256" font-size="68" font-weight="bold" fill="#D8DEE6" text-anchor="middle" dominant-baseline="central">8</text>
+  <text x="24" y="330" font-size="20" fill="#D8DEE6" dominant-baseline="central">Escriba la sistólica medida</text>
+  <text x="24" y="352" font-size="20" fill="#D8DEE6" dominant-baseline="central">con el tensiómetro</text>
+  <text x="24" y="386" font-size="16" fill="#8A96A3" dominant-baseline="central">Sistólica 70-250 · Diastólica 40-150</text>
+  <text x="24" y="406" font-size="16" fill="#8A96A3" dominant-baseline="central">Sistólica al menos 10 mayor que diastólica</text>
+<rect x="404" y="48" width="124" height="88" fill="#3A4654"/><text x="466" y="92" font-size="40" font-weight="bold" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">1</text>
+<rect x="534" y="48" width="124" height="88" fill="#3A4654"/><text x="596" y="92" font-size="40" font-weight="bold" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">2</text>
+<rect x="664" y="48" width="124" height="88" fill="#3A4654"/><text x="726" y="92" font-size="40" font-weight="bold" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">3</text>
+<rect x="404" y="142" width="124" height="88" fill="#3A4654"/><text x="466" y="186" font-size="40" font-weight="bold" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">4</text>
+<rect x="534" y="142" width="124" height="88" fill="#3A4654"/><text x="596" y="186" font-size="40" font-weight="bold" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">5</text>
+<rect x="664" y="142" width="124" height="88" fill="#3A4654"/><text x="726" y="186" font-size="40" font-weight="bold" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">6</text>
+<rect x="404" y="236" width="124" height="88" fill="#3A4654"/><text x="466" y="280" font-size="40" font-weight="bold" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">7</text>
+<rect x="534" y="236" width="124" height="88" fill="#3A4654"/><text x="596" y="280" font-size="40" font-weight="bold" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">8</text>
+<rect x="664" y="236" width="124" height="88" fill="#3A4654"/><text x="726" y="280" font-size="40" font-weight="bold" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">9</text>
+<rect x="404" y="330" width="124" height="88" fill="#3A4654"/><text x="466" y="374" font-size="20" font-weight="normal" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">Borrar</text>
+<rect x="534" y="330" width="124" height="88" fill="#3A4654"/><text x="596" y="374" font-size="40" font-weight="bold" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">0</text>
+<rect x="664" y="330" width="124" height="88" fill="#3A4654"/><text x="726" y="374" font-size="20" font-weight="normal" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">Limpiar</text>
+
+  <g stroke="#222B35" stroke-width="1">
+    <line x1="392.5" y1="40" x2="392.5" y2="429"/>
+    <line x1="0" y1="429.5" x2="800" y2="429.5"/>
+  </g>
+  <g font-size="20" text-anchor="middle" dominant-baseline="central">
+    <rect x="482" y="434" width="152" height="42" fill="#1D9E75"/>
+    <text x="558" y="455" fill="#FFFFFF" font-weight="bold">Calibrar</text>
+    <rect x="640" y="434" width="152" height="42" fill="#151C24"/>
+    <text x="716" y="455" fill="#85B7EB">Volver</text>
+  </g>
+</svg>
