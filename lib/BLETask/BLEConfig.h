@@ -3,6 +3,32 @@
 #define BLE_CONFIG_H
 
 #include <stdint.h>
+#include <Arduino.h>
+
+// ========================================
+// MENSAJES DE DEPURACION
+// ========================================
+
+// Descomenta para ver los mensajes [BLE] por Serial. Con el debugger del Nextion, Serial es el
+// enlace de la pantalla: el texto sin FF FF FF se pega al siguiente comando y lo invalida
+// #define BLE_DEBUG
+
+class BleNullPrint : public Print {
+public:
+    size_t write(uint8_t) override { return 1; }
+    size_t write(const uint8_t*, size_t size) override { return size; }
+};
+
+inline Print& bleNullLog() {
+    static BleNullPrint p;
+    return p;
+}
+
+#ifdef BLE_DEBUG
+#define BLE_LOG Serial
+#else
+#define BLE_LOG bleNullLog()
+#endif
 
 // ========================================
 // IDENTIFICACION DEL DISPOSITIVO
