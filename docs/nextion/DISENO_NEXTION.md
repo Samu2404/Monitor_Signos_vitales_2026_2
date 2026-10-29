@@ -84,7 +84,8 @@ y el conjunto de caracteres **ISO-8859-1** (incluye ñ, á, °).
 |---|---|---|---|---|---|---|---|---|---|
 | `tPat` | Text | 0 | 0 | 128 | 40 | 1 | 4324 | 57084 | `Adulto` / `Pediátrico` / `Neonatal` |
 | `tAlarm` | Text | 128 | 0 | 420 | 40 | 2 | 4324 | 57084 | Alarma de mayor prioridad. En alarma: `bco=41317`, `pco=65535` |
-| `tPause` | Text | 548 | 0 | 92 | 40 | 1 | 4324 | 65070 | Cuenta regresiva `1:45` (vacío si no hay pausa) |
+| `pPause` | Picture | 560 | 8 | 24 | 24 | – | – | – | `icons/mute_24.png`; oculto con `vis pPause,0` al inicio del Preinitialize |
+| `tPause` | Text | 588 | 0 | 52 | 40 | 1 | 4324 | 65070 | Cuenta regresiva `1:45` (vacío si no hay pausa); la escribe el ESP32 |
 | `tBle` | Text | 640 | 0 | 60 | 40 | 1 | 4324 | 34237 | `BLE` (conectado) / gris 23342 si está desconectado |
 | `tClock` | Text | 700 | 0 | 100 | 40 | 1 | 4324 | 57084 | `14:32` |
 
@@ -262,6 +263,7 @@ Formato de Easy Nextion: `printh 23 <len> <grupo> <datos…>`, donde `len` = 1 (
 | `P` (0x50) | `23 02 50 <página>` | ✅ implementado | Preinitialize de cada página |
 | `W` (0x57) | `23 02 57 <id>` | ✅ implementado | Onda elegida en `full_wf` |
 | `C` (0x43) | `23 03 43 <sbp> <dbp>` | ✅ implementado | Botón de calibración en `cal` |
+| `A` (0x41) | `23 02 41 01` | ✅ implementado | Tecla `bPause`: pausa o reactiva el audio 2 min |
 | `S` (0x53) | `23 04 53 <clave> <valH> <valL>` | 🔜 propuesto | Al pulsar `Volver` en configuración |
 
 > Ojo: el comentario de `NextionHMI.cpp` para la calibración dice `23 02 67`, pero el código

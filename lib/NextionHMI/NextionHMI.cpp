@@ -140,6 +140,24 @@ bool NextionHMI::takeCalibrationRequest(int& sbp, int& dbp) {
     return true;
 }
 
+bool NextionHMI::takeAudioPauseRequest() {
+    if (!_pauseRequest) {
+        return false;
+    }
+    _pauseRequest = false;
+    return true;
+}
+
+void NextionHMI::writeAudioPause(uint16_t secondsLeft) {
+    if (_queue == nullptr || (int32_t)secondsLeft == _pauseQueued) {
+        return;                         // Sin cambios: no se llena la cola
+    }
+    msg m{msg::AudioPause, 0, 0, (int32_t)secondsLeft};
+    if (xQueueSend(_queue, &m, 0) == pdTRUE) {
+        _pauseQueued = secondsLeft;
+    }
+}
+
 void NextionHMI::updateValues(int spo2, int bpm, int pulseRate, int hrVariance, float temperature, int respirationRate) {
     if (_vitalsBox == nullptr) {
         return;
@@ -184,6 +202,7 @@ void NextionHMI::_invalidate() {
     for (uint8_t i = 0; i < ValCount; i++) {
         _lastValues[i] = Unknown;
     }
+    _pauseShown = Unknown;
     _lastValuesTime = millis() - ValuesPeriodMs;  // El próximo updateValues() no espera
 }
 
@@ -194,9 +213,28 @@ void NextionHMI::_onPageLoaded(uint8_t page) {
     for (uint8_t i = 0; i < ValCount; i++) {
         _syncNum(static_cast<ValueId>(i));
     }
+    _syncPause();          // La barra de estado de cada página arranca sin pausa
 #ifdef NEXTION_DEBUG
     Serial.printf("[nextion] pagina %u\n", page);
 #endif
+}
+
+void NextionHMI::_syncPause() {
+    if (_pauseWanted == Unknown || _pauseWanted == _pauseShown) {
+        return;
+    }
+    if (_pauseWanted == 0) {
+        _myNex.writeStr("vis pPause,0");
+        _myNex.writeStr("tPause.txt", "");
+    } else {
+        if (_pauseShown <= 0) {                     // Recién empieza o la página es nueva
+            _myNex.writeStr("vis pPause,1");
+        }
+        char txt[8];
+        snprintf(txt, sizeof(txt), "%d:%02d", (int)(_pauseWanted / 60), (int)(_pauseWanted % 60));
+        _myNex.writeStr("tPause.txt", txt);
+    }
+    _pauseShown = _pauseWanted;
 }
 
 void NextionHMI::_listen() {
@@ -233,6 +271,11 @@ void NextionHMI::_onCustomCommand() {
             req.sbp = (uint8_t) _myNex.readByte();
             req.dbp = (uint8_t) _myNex.readByte();
             xQueueOverwrite(_calBox, &req);   // Solo se guarda la última solicitud
+            break;
+        case 'A':                                   // printh 23 02 41 <cmd>: teclas de alarma
+            if ((uint8_t)_myNex.readByte() == AlarmCmdPause) {
+                _pauseRequest = true;
+            }
             break;
         default:                                    // Grupo desconocido: se descartan sus datos
             for (uint8_t i =1 ; i < _myNex.cmdLength; i++){
@@ -308,6 +351,10 @@ void NextionHMI::_handle(const msg& m) {
             break;
         case msg::Invalidate:
             _onPageLoaded(_page);
+            break;
+        case msg::AudioPause:
+            _pauseWanted = m.value;
+            _syncPause();
             break;
         default:
             break;

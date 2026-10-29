@@ -42,12 +42,21 @@ void AlarmTask::_taskLoop() {
         VitalSigns v = _source ? _source() : _collect();   // 1. Reúne los datos de ECG, PPG y BP
         _evaluateAlarms(v);                                 // 2. Evalúa las reglas de alarma
         AlarmPriority prio = _alarms.highestPriority();
-        _buzzer.setPriority(prio);                          // 3. Suena / calla según las alarmas
+        const char* alarms = _alarms.getAlarmString();
+        if (_pauseRequest) {
+            _pauseRequest = false;
+            _pause.toggle(alarms);
+        } else {
+            _pause.tick(alarms);
+        }
+        // 3. Suena / calla según las alarmas (en pausa solo calla el audio)
+        _buzzer.setPriority(_pause.active() ? AlarmPriority::NONE : prio);
         _leds.show(prio);                                   //    y enciende el LED de esa gravedad
 
         xSemaphoreTake(_mutex, portMAX_DELAY);              // 4. Deja la copia para BLETask
         _snapshot.vitals = v;
-        memcpy(_snapshot.alarms, _alarms.getAlarmString(), sizeof(_snapshot.alarms));
+        memcpy(_snapshot.alarms, alarms, sizeof(_snapshot.alarms));
+        _snapshot.audioPauseS = _pause.secondsLeft();
         xSemaphoreGive(_mutex);
     }
 }

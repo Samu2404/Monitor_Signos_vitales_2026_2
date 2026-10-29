@@ -95,6 +95,17 @@ public:
      */
     bool takeCalibrationRequest(int& sbp, int& dbp);
 
+    /** @brief Toma el pedido del botón "Pausar audio" (printh 23 02 41 01)
+     * @return true si se pulsó desde la última llamada
+     */
+    bool takeAudioPauseRequest();
+
+    /** @brief Muestra la pausa de audio en la barra de estado (pPause y tPause)
+     * @param secondsLeft: Segundos que faltan (0 = sin pausa: oculta el icono y vacía el texto)
+     * @note Se puede llamar en cada vuelta de loop(): solo envía cuando cambia
+     */
+    void writeAudioPause(uint16_t secondsLeft);
+
     /** @brief Registra una gráfica con su propia tasa de refresco
      * @param id: ID del objeto en la pantalla
      * @param channel: Canal del objeto en la pantalla
@@ -173,7 +184,7 @@ private:
     };
 
     struct msg {
-        enum type {Wave, WaveUpdate, WaveConfig, Num, Invalidate };
+        enum type {Wave, WaveUpdate, WaveConfig, Num, Invalidate, AudioPause };
         type type;
         uint8_t id;
         uint8_t channel;
@@ -201,6 +212,7 @@ private:
     void _invalidate();                          // Solo desde la tarea del HMI (o el constructor)
     void _listen();                              // Lee los comandos que manda el Nextion
     void _onPageLoaded(uint8_t page);
+    void _syncPause();                           // Envía la pausa de audio si la pantalla no la tiene
     
     bool _showsNumbers() const { return _page == PageMain; }
     bool _showsWave(uint8_t id) const {
@@ -228,6 +240,12 @@ private:
     QueueHandle_t _vitalsBox = nullptr;
     struct CalRequest {        int sbp;        int dbp;    };
     QueueHandle_t _calBox = nullptr;
+
+    static constexpr uint8_t AlarmCmdPause = 0x01;   // printh 23 02 41 01: botón "Pausar audio"
+    volatile bool _pauseRequest = false;             // Lo pone la tarea del HMI; lo toma takeAudioPauseRequest()
+    int32_t _pauseQueued = Unknown;                  // Último valor encolado por writeAudioPause()
+    int32_t _pauseWanted = Unknown;                  // Segundos de pausa pedidos (tarea del HMI)
+    int32_t _pauseShown  = Unknown;                  // Segundos que muestra la pantalla
 
 
 
