@@ -2,8 +2,8 @@
 #include <math.h>
 #include <string.h>
 
-AlarmTask::AlarmTask(EcgTask& ecg, PpgTask& ppg, BpTask& bp, AlarmBuzzer& buzzer, AlarmLeds& leds)
-    : _ecg(ecg), _ppg(ppg), _bp(bp), _buzzer(buzzer), _leds(leds) {
+AlarmTask::AlarmTask(EcgTask& ecg, PpgTask& ppg, BpTask& bp, BtempTask& temp, AlarmBuzzer& buzzer, AlarmLeds& leds)
+    : _ecg(ecg), _ppg(ppg), _bp(bp), _temp(temp), _buzzer(buzzer), _leds(leds) {
     memcpy(_snapshot.alarms, _alarms.getAlarmString(), sizeof(_snapshot.alarms));
 }
 
@@ -92,8 +92,9 @@ VitalSigns AlarmTask::_collect() {
     EcgTask::Snapshot ecg = _ecg.getSnapshot();
     PpgTask::Snapshot ppg = _ppg.getSnapshot();
     BpTask::Snapshot  bp  = _bp.getSnapshot();
+    BtempTask::Snapshot temp = _temp.getSnapshot();
 
-    VitalSigns v;   // Todo empieza en 0 = "sin dato" (temperature, hrv y rr se quedan así)
+    VitalSigns v;   // Todo empieza en 0 = "sin dato" (hrv y rr se quedan así)
 
     // FC del ECG: float -> entero redondeado
     v.hr = ecg.bpm > 0.0f ? (uint16_t)lroundf(ecg.bpm) : 0;
@@ -106,6 +107,9 @@ VitalSigns AlarmTask::_collect() {
     bool bpValid = bp.calibrated && v.hr > 0 && v.pr > 0 && bp.sbp > 0.0f && bp.dbp > 0.0f;
     v.sys = bpValid ? (uint16_t)lroundf(bp.sbp) : 0;
     v.dia = bpValid ? (uint16_t)lroundf(bp.dbp) : 0;
+
+    // Temperatura: 0 = sin dato; las reglas de temperatura ya lo ignoran
+    v.temperature = temp.celsius;
 
     return v;
 }

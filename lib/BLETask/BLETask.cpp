@@ -36,11 +36,11 @@ void BLETask::_publishSnapshot(const VitalSigns& v) {
     char buffer[BLEConfig::SNAPSHOT_MAX_LEN + 1];   // 31 caracteres + '\0'
 
     if (!SnapshotFormatter::format(v, buffer, sizeof(buffer))) {
-        Serial.println("[BLE] Error formateando Snapshot");
+        BLE_LOG.println("[BLE] Error formateando Snapshot");
         return;
     }
     if (!_ble.updateSnapshot(buffer)) {
-        Serial.println("[BLE] Error actualizando Snapshot");
+        BLE_LOG.println("[BLE] Error actualizando Snapshot");
     }
 }
 

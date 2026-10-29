@@ -8,6 +8,7 @@
 #include "EcgTask.h"
 #include "PpgTask.h"
 #include "BpTask.h"
+#include "BtempTask.h"
 
 /**
  * @brief Tarea de alarmas: cada 1 s reúne los signos vitales, evalúa las reglas,
@@ -18,7 +19,7 @@
  */
 class AlarmTask {
 public:
-    AlarmTask(EcgTask& ecg, PpgTask& ppg, BpTask& bp, AlarmBuzzer& buzzer, AlarmLeds& leds);
+    AlarmTask(EcgTask& ecg, PpgTask& ppg, BpTask& bp, BtempTask& temp, AlarmBuzzer& buzzer, AlarmLeds& leds);
 
     bool begin();
 
@@ -53,6 +54,7 @@ private:
     EcgTask&     _ecg;
     PpgTask&     _ppg;
     BpTask&      _bp;
+    BtempTask&   _temp;
     AlarmBuzzer& _buzzer;
     AlarmLeds&   _leds;
     AlarmManager _alarms;

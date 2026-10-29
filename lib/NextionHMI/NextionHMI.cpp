@@ -110,7 +110,7 @@ void NextionHMI::writeHRvariance(int hrVariance) {
 }
 
 void NextionHMI::writeTemperature(float temperature) {
-    _enqueueNum(ValTemperature, (int32_t)temperature);
+    _enqueueNum(ValTemperature, (int32_t)lroundf(temperature * 10.0f));   // xfloat con 1 decimal (vvs1=1)
 }
 
 void NextionHMI::writeRespirationRate(int respirationRate) {
@@ -407,6 +407,6 @@ void NextionHMI::_flushVitals() {
     _setNum(ValBPM, v.bpm);
     _setNum(ValPulseRate, v.pulseRate);
     _setNum(ValHRV, v.hrVariance);
-    _setNum(ValTemperature, (int32_t)v.temperature);
+    _setNum(ValTemperature, (int32_t)lroundf(v.temperature * 10.0f));      // xfloat con 1 decimal (vvs1=1)
     _setNum(ValRespiration, v.respirationRate);
 }

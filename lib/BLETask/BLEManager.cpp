@@ -18,14 +18,14 @@ bool BLEManager::begin() {
 
     // Inicializar NimBLE
     if (!NimBLEDevice::init(BLE_DEVICE_NAME)) {
-        Serial.println("[BLE] Error iniciando NimBLE");
+        BLE_LOG.println("[BLE] Error iniciando NimBLE");
         return false;
     }
 
     // Configurar MTU local
     if (!NimBLEDevice::setMTU(
             BLEConfig::MTU_TARGET)) {
-        Serial.println("[BLE] Error configurando MTU");
+        BLE_LOG.println("[BLE] Error configurando MTU");
         return false;
     }
 
@@ -33,7 +33,7 @@ bool BLEManager::begin() {
     server_ = NimBLEDevice::createServer();
 
     if (server_ == nullptr) {
-        Serial.println("[BLE] Error creando servidor");
+        BLE_LOG.println("[BLE] Error creando servidor");
         return false;
     }
 
@@ -52,7 +52,7 @@ bool BLEManager::begin() {
     );
 
     if (service_ == nullptr) {
-        Serial.println("[BLE] Error creando servicio");
+        BLE_LOG.println("[BLE] Error creando servicio");
         return false;
     }
 
@@ -80,7 +80,7 @@ bool BLEManager::begin() {
     if (snapshotChar_ == nullptr ||
         alarmsChar_ == nullptr) {
 
-        Serial.println(
+        BLE_LOG.println(
             "[BLE] Error creando caracteristicas"
         );
         return false;
@@ -103,7 +103,7 @@ bool BLEManager::begin() {
     // ========================================
 
     if (!server_->start()) {
-        Serial.println("[BLE] Error iniciando GATT");
+        BLE_LOG.println("[BLE] Error iniciando GATT");
         return false;
     }
 
@@ -115,7 +115,7 @@ bool BLEManager::begin() {
         NimBLEDevice::getAdvertising();
 
     if (advertising == nullptr) {
-        Serial.println("[BLE] Error en publicidad");
+        BLE_LOG.println("[BLE] Error en publicidad");
         return false;
     }
 
@@ -135,24 +135,24 @@ bool BLEManager::begin() {
     advertising->enableScanResponse(true);
 
     if (!advertising->setAdvertisementData(advData)) {
-        Serial.println("[BLE] Error en anuncio");
+        BLE_LOG.println("[BLE] Error en anuncio");
         return false;
     }
 
     if (!advertising->setScanResponseData(scanData)) {
-        Serial.println("[BLE] Error en scan response");
+        BLE_LOG.println("[BLE] Error en scan response");
         return false;
     }
 
     // Iniciar publicidad continuamente
     if (!advertising->start()) {
-        Serial.println("[BLE] Error iniciando publicidad");
+        BLE_LOG.println("[BLE] Error iniciando publicidad");
         return false;
     }
 
     initialized_ = true;
 
-    Serial.println("[BLE] Servidor iniciado");
+    BLE_LOG.println("[BLE] Servidor iniciado");
 
     return true;
 }
@@ -331,14 +331,14 @@ bool BLEManager::updateAlarms(const char* data) {
     memcpy(lastAlarms_, data, length);
     lastAlarms_[length] = '\0';
 
-    Serial.print("[BLE] Alarmas: ");
-    Serial.println(lastAlarms_);
+    BLE_LOG.print("[BLE] Alarmas: ");
+    BLE_LOG.println(lastAlarms_);
 
     // Notificar a clientes suscritos
     if (isConnected()) {
 
         if (!alarmsChar_->notify()) {
-            Serial.println(
+            BLE_LOG.println(
                 "[BLE] Notificacion no enviada"
             );
         }
@@ -371,7 +371,7 @@ void BLEManager::onConnect(
     NimBLEConnInfo& connInfo
 ) {
 
-    Serial.println("[BLE] Cliente conectado");
+    BLE_LOG.println("[BLE] Cliente conectado");
 
     // Permitir solamente un cliente
     if (server->getConnectedCount() > 1) {
@@ -405,9 +405,9 @@ void BLEManager::onDisconnect(
     int reason
 ) {
 
-    Serial.println("[BLE] Cliente desconectado");
+    BLE_LOG.println("[BLE] Cliente desconectado");
 
-    Serial.printf(
+    BLE_LOG.printf(
         "[BLE] Motivo: %d\n",
         reason
     );
@@ -426,7 +426,7 @@ void BLEManager::onMTUChange(
     NimBLEConnInfo& connInfo
 ) {
 
-    Serial.printf(
+    BLE_LOG.printf(
         "[BLE] MTU negociado: %u bytes\n",
         mtu
     );
