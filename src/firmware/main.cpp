@@ -27,35 +27,40 @@
 constexpr float FsEcg = 500.0f;
 constexpr float FsPpg = 250.0f;
 
-// AFE4950 por SPI (RDY en 16, como en el esquema de la librería)
+// Pines según el esquemático de la placa (Proyecto integrador.kicad_sch)
+
+// AFE4950 por SPI (J1)
 constexpr uint8_t PinSclk = 18;
-constexpr uint8_t PinMiso = 26;
-constexpr uint8_t PinMosi = 23;
+constexpr uint8_t PinMiso = 19;
+constexpr uint8_t PinMosi = 26;          // J3.10: el símbolo dice "23", pero en el DevKit de 38 pines es el GPIO26
 constexpr uint8_t PinCs   = 5;
 constexpr uint8_t PinRst  = 4;
 constexpr uint8_t PinRdy  = 16;
 
-// Termistor YSI 400: salida del amplificador del puente al ADC1 (el ADC2 no funciona con BLE)
+// Termistor YSI 400 (J20): salida del amplificador del puente al ADC1 (el ADC2 no funciona con BLE)
 constexpr uint8_t PinTemp = 34;
 
-// Buzzer de alarmas (pasivo: se excita con PWM; false si es activo)
-constexpr uint8_t PinBuzzer     = 25;
+// Buzzer de alarmas: GPIO -> R2 4.7k -> base de Q1 (2N3904), buzzer entre 3.3V y el colector
+// (pasivo: se excita con PWM; false si es activo)
+constexpr uint8_t PinBuzzer     = 13;
 constexpr bool    BuzzerPassive = true;
 
-// LEDs de gravedad (GPIO -> resistencia 220-330 ohm -> LED -> GND)
-constexpr uint8_t PinLedGreen  = 32;     // Normal
-constexpr uint8_t PinLedBlue   = 33;     // Leve
-constexpr uint8_t PinLedYellow = 14;     // Media
-constexpr uint8_t PinLedRed    = 13;     // Grave
+// LEDs de gravedad (GPIO -> LED -> resistencia 220-330 ohm -> GND)
+constexpr uint8_t PinLedGreen  = 27;     // Normal  (D4)
+constexpr uint8_t PinLedBlue   = 25;     // Leve    (D3)
+constexpr uint8_t PinLedYellow = 33;     // Media   (D2)
+constexpr uint8_t PinLedRed    = 32;     // Grave   (D1)
 
 // Nextion
 #if LOG_DATOS
-// Pantalla física (RX en 27 porque el 16 lo usa el RDY del AFE); Serial queda para el registro
+// En la placa el Nextion va por UART0 (1/3): para registrar hay que cablear la pantalla aparte
+// a Serial2 en pines libres (no ruteados en la placa); Serial queda para el registro
 HardwareSerial&   HmiSerial = Serial2;
-constexpr uint8_t PinHmiRx  = 27;
+constexpr uint8_t PinHmiRx  = 22;
 constexpr uint8_t PinHmiTx  = 17;
 #else
-// Debugger del Nextion Editor por el USB (UART0, RX 3 / TX 1): no imprimir nada más por Serial
+// En la placa: UART0 (RX 3 / TX 1) por el conversor de nivel (J11/J12) al Nextion (J13).
+// Sirve también para el debugger del Nextion Editor por el USB: no imprimir nada más por Serial
 HardwareSerial&   HmiSerial = Serial;
 constexpr uint8_t PinHmiRx  = 3;
 constexpr uint8_t PinHmiTx  = 1;
