@@ -10,3 +10,11 @@
 # CMake generado automáticamente por PlatformIO (integración ESP-IDF)
 /CMakeLists.txt
 /src/CMakeLists.txt
+
+# Imágenes y herramientas locales: no se suben al repositorio
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+/tools/
