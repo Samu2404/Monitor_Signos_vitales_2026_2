@@ -5,6 +5,7 @@
 #include "AlarmManager.h"
 #include "AlarmBuzzer.h"
 #include "AlarmLeds.h"
+#include "AudioPause.h"
 #include "EcgTask.h"
 #include "PpgTask.h"
 #include "BpTask.h"
@@ -29,10 +30,15 @@ public:
     struct Snapshot {
         VitalSigns vitals;
         char       alarms[9];     // "00000000": una posición por AlarmType
+        uint16_t   audioPauseS;   // Segundos de audio en pausa que faltan (0 = sin pausa)
     };
 
     /** @brief Últimos signos vitales y estado de alarmas (copia protegida por mutex) */
     Snapshot getSnapshot() const;
+
+    /** @brief Botón "Pausar audio": calla el buzzer AudioPause::DurationS s, o lo reactiva
+     *         si ya estaba en pausa. Se puede llamar desde cualquier tarea */
+    void pauseAudio() { _pauseRequest = true; }
 
 private:
     static constexpr uint32_t PeriodMs      = 1000;   // Las persistencias de AlarmConfig son en s
@@ -58,6 +64,8 @@ private:
     AlarmBuzzer& _buzzer;
     AlarmLeds&   _leds;
     AlarmManager _alarms;
+    AudioPause   _pause;
+    volatile bool _pauseRequest = false;   // Botón pulsado; lo atiende la tarea en su próximo ciclo
 
     Snapshot _snapshot = {};
     mutable SemaphoreHandle_t _mutex = nullptr;

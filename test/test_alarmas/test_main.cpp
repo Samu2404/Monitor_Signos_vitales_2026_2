@@ -4,6 +4,7 @@
 #include "AlarmManager.h"
 #include "AlarmBuzzer.h"
 #include "AlarmLeds.h"
+#include "AudioPause.h"
 
 // Buzzer y LEDs en la placa: mismos pines que main.cpp
 static const uint8_t PinBuzzer     = 25;
@@ -117,6 +118,43 @@ void test_texto_ble_sigue_con_8_posiciones() {
 }
 
 // ========================================
+// AUDIO PAUSE (pausa del sonido de alarma)
+// ========================================
+
+void test_pausa_cuenta_y_termina() {
+    AudioPause p;
+    p.toggle("10000000");
+    TEST_ASSERT_TRUE(p.active());
+    TEST_ASSERT_EQUAL_UINT16(AudioPause::DurationS, p.secondsLeft());
+    for (uint16_t i = 1; i < AudioPause::DurationS; i++) {
+        p.tick("10000000");
+    }
+    TEST_ASSERT_EQUAL_UINT16(1, p.secondsLeft());          // La misma alarma no corta la pausa
+    p.tick("10000000");
+    TEST_ASSERT_FALSE(p.active());                          // A los 2 min el sonido vuelve
+}
+
+void test_pausa_alarma_nueva_la_corta() {
+    AudioPause p;
+    p.toggle("10000000");
+    p.tick("00000000");                                     // Se va la alarma: la pausa sigue
+    TEST_ASSERT_TRUE(p.active());
+    p.tick("10000000");                                     // Vuelve la misma: sigue
+    TEST_ASSERT_TRUE(p.active());
+    p.tick("10100000");                                     // Aparece SpO2 baja: se corta
+    TEST_ASSERT_FALSE(p.active());
+}
+
+void test_pausa_segundo_toque_la_cancela() {
+    AudioPause p;
+    p.toggle("00000000");                                   // También sin alarmas (pre-silencio)
+    TEST_ASSERT_TRUE(p.active());
+    p.toggle("00000000");
+    TEST_ASSERT_FALSE(p.active());
+    TEST_ASSERT_EQUAL_UINT16(0, p.secondsLeft());
+}
+
+// ========================================
 // LEDS EN LA PLACA (se verifican a la vista)
 // ========================================
 
@@ -206,6 +244,9 @@ void setup() {
     RUN_TEST(test_prioridad_media_temperatura);
     RUN_TEST(test_prioridad_critica_gana);
     RUN_TEST(test_texto_ble_sigue_con_8_posiciones);
+    RUN_TEST(test_pausa_cuenta_y_termina);
+    RUN_TEST(test_pausa_alarma_nueva_la_corta);
+    RUN_TEST(test_pausa_segundo_toque_la_cancela);
     RUN_TEST(test_leds_secuencia);
     RUN_TEST(test_buzzer_arranca);
     RUN_TEST(test_buzzer_patron_leve);
