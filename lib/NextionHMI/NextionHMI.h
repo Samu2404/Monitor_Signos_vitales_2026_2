@@ -144,6 +144,16 @@ public:
     Page currentPage() const { return (Page)_page; }
 
 
+    /** @brief Función que recibe cada comando propio (# <len> <grupo> <datos>) que manda la pantalla
+     * @param group: Letra del grupo ('W', 'C', 'S', ...)
+     * @param data: Bytes de datos, sin el grupo
+     * @param len: Cantidad de bytes de datos
+     * @note Se llama desde la tarea del HMI, antes de procesar el comando. Solo para depurar
+     */
+    using CommandLog = void (*)(char group, const uint8_t* data, uint8_t len);
+    void setCommandLog(CommandLog log) { _cmdLog = log; }
+
+
     // Metodos privados de la clase
 private:
     friend void easyNexReadCustomCommand();   // EasyNex llama a esta función global con los comandos propios
@@ -153,6 +163,8 @@ private:
     uint8_t _fullWfId = AllWaves;             // Id de la gráfica visible en full_wf
 
     void _onCustomCommand();                  // Maneja los comandos # <len> <grupo> que no son de EasyNex
+    static constexpr uint8_t MaxCmdData = 16; // Bytes de datos que se guardan de un comando propio
+    CommandLog _cmdLog = nullptr;
 
 
     static constexpr uint8_t  MaxWaveforms   = 4;   // Gráficas simultáneas que se pueden registrar

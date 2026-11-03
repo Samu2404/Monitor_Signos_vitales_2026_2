@@ -363,7 +363,64 @@ bool BLEManager::isConnected() const {
 
 
 // ============================================
-// 5. CALLBACK DE CONEXION
+// 5. ENCENDER / APAGAR BLE
+// ============================================
+
+bool BLEManager::setEnabled(bool enabled) {
+
+    if (!initialized_ || server_ == nullptr) {
+        return false;
+    }
+
+    if (enabled == enabled_) {
+        return true;
+    }
+
+    enabled_ = enabled;
+
+    NimBLEAdvertising* advertising =
+        NimBLEDevice::getAdvertising();
+
+    if (advertising == nullptr) {
+        return false;
+    }
+
+    if (enabled) {
+
+        // Volver a anunciar y reanunciar tras cada desconexion
+        server_->advertiseOnDisconnect(true);
+
+        if (!advertising->start()) {
+            BLE_LOG.println("[BLE] Error iniciando publicidad");
+            return false;
+        }
+
+        BLE_LOG.println("[BLE] Encendido");
+        return true;
+    }
+
+    // Apagar antes de desconectar: que no vuelva a anunciar
+    server_->advertiseOnDisconnect(false);
+    advertising->stop();
+
+    // Desconectar a los clientes conectados
+    for (uint16_t handle : server_->getPeerDevices()) {
+        server_->disconnect(handle);
+    }
+
+    BLE_LOG.println("[BLE] Apagado");
+
+    return true;
+}
+
+bool BLEManager::isEnabled() const {
+
+    return enabled_;
+}
+
+
+// ============================================
+// 6. CALLBACK DE CONEXION
 // ============================================
 
 void BLEManager::onConnect(
@@ -396,7 +453,7 @@ void BLEManager::onConnect(
 
 
 // ============================================
-// 6. CALLBACK DE DESCONEXION
+// 7. CALLBACK DE DESCONEXION
 // ============================================
 
 void BLEManager::onDisconnect(
@@ -418,7 +475,7 @@ void BLEManager::onDisconnect(
 
 
 // ============================================
-// 7. CALLBACK DE CAMBIO DE MTU
+// 8. CALLBACK DE CAMBIO DE MTU
 // ============================================
 
 void BLEManager::onMTUChange(

@@ -29,6 +29,12 @@ public:
     // Consultar estado de conexion
     bool isConnected() const;
 
+    // Encender / apagar BLE (apagado: desconecta al cliente y deja de anunciar)
+    bool setEnabled(bool enabled);
+
+    // Consultar si BLE esta encendido
+    bool isEnabled() const;
+
 private:
 
     // ====================================
@@ -48,6 +54,8 @@ private:
     // ====================================
 
     bool initialized_ = false;
+
+    bool enabled_ = true;
 
     char lastAlarms_[9] = "00000000";
 

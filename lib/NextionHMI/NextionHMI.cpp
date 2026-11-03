@@ -224,20 +224,34 @@ void NextionHMI::_listen() {
 }
 
 void NextionHMI::_onCustomCommand() {
+    // Se leen todos los datos antes de interpretarlos (cmdLength cuenta también el grupo)
+    uint8_t data[MaxCmdData];
+    uint8_t len = 0;
+    for (uint8_t i = 1; i < _myNex.cmdLength; i++) {
+        uint8_t b = (uint8_t)_myNex.readByte();
+        if (len < MaxCmdData) {
+            data[len++] = b;                        // Los que no caben se descartan
+        }
+    }
+    if (_cmdLog != nullptr) {
+        _cmdLog((char)_myNex.cmdGroup, data, len);
+    }
+
     switch (_myNex.cmdGroup){
         case 'W':                                   // printh 23 02 57 <id>: gráfica visible en full_wf
-            _fullWfId = (uint8_t)_myNex.readByte();
+            if (len >= 1) {
+                _fullWfId = data[0];
+            }
             break;
         case 'C':                                   // printh 23 02 67 <sbp> <dbp>: calibración solicitada
-            CalRequest req;
-            req.sbp = (uint8_t) _myNex.readByte();
-            req.dbp = (uint8_t) _myNex.readByte();
-            xQueueOverwrite(_calBox, &req);   // Solo se guarda la última solicitud
-            break;
-        default:                                    // Grupo desconocido: se descartan sus datos
-            for (uint8_t i =1 ; i < _myNex.cmdLength; i++){
-                _myNex.readByte();
+            if (len >= 2) {
+                CalRequest req;
+                req.sbp = data[0];
+                req.dbp = data[1];
+                xQueueOverwrite(_calBox, &req);   // Solo se guarda la última solicitud
             }
+            break;
+        default:                                    // Grupo desconocido: sus datos ya se leyeron
             break;
     }
 }
