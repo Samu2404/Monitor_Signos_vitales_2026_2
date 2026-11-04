@@ -6,6 +6,7 @@
 #include "AlarmBuzzer.h"
 #include "AlarmLeds.h"
 #include "AudioPause.h"
+#include "AlarmAck.h"
 #include "EcgTask.h"
 #include "PpgTask.h"
 #include "BpTask.h"
@@ -31,14 +32,24 @@ public:
         VitalSigns vitals;
         char       alarms[9];     // "00000000": una posición por AlarmType
         uint16_t   audioPauseS;   // Segundos de audio en pausa que faltan (0 = sin pausa)
+        AlarmPriority priority;   // Mayor prioridad activa (también las técnicas)
+        char       bar[24];       // Texto de la barra de alarmas ("" = sin alarmas)
     };
 
     /** @brief Últimos signos vitales y estado de alarmas (copia protegida por mutex) */
     Snapshot getSnapshot() const;
 
-    /** @brief Botón "Pausar audio": calla el buzzer AudioPause::DurationS s, o lo reactiva
-     *         si ya estaba en pausa. Se puede llamar desde cualquier tarea */
-    void pauseAudio() { _pauseRequest = true; }
+    /** @brief Botón "Pausar audio" (53 10 <segundos>): calla el buzzer seconds s (máx.
+     *         AudioPause::DurationS); 0 lo reactiva. Se puede llamar desde cualquier tarea */
+    void setAudioPause(uint16_t seconds) { _pauseRequestS = seconds; }
+
+    /** @brief Botón "Reconocer" (53 13): calla el buzzer de las alarmas activas mientras sigan
+     *         activas (ver AlarmAck). Se puede llamar desde cualquier tarea */
+    void acknowledge() { _ackRequest = true; }
+
+    /** @brief Nuevo paciente: la calibración de PA se descartó a propósito, sin aviso "PA: RECALIBRAR".
+     *         Llamarlo junto con el descarte en BpTask. Se puede llamar desde cualquier tarea */
+    void forgetBpCalibration() { _bpForget = true; }
 
 private:
     static constexpr uint32_t PeriodMs      = 1000;   // Las persistencias de AlarmConfig son en s
@@ -50,12 +61,21 @@ private:
     void _taskLoop();
     VitalSigns _collect();
     void _evaluateAlarms(const VitalSigns& v);
+    void _evaluateTech();
 
     AlarmRule _hrHighRule;
     AlarmRule _hrLowRule;
     AlarmRule _spo2LowRule;
     AlarmRule _tempHighRule;
     AlarmRule _tempLowRule;
+    bool _tempHighSevere = false;          // Temperatura alta en media (si no, leve)
+    bool _tempLowSevere  = false;
+
+    // Estado de la PA (lo deja _collect; con datos simulados queda sin calibrar: sin aviso)
+    bool _bpCalibrated    = false;
+    bool _bpCalibrating   = false;
+    bool _bpWasCalibrated = false;         // Estuvo calibrada desde la última recalibración
+    volatile bool _bpForget = false;       // Pedido de forgetBpCalibration()
 
     EcgTask&     _ecg;
     PpgTask&     _ppg;
@@ -65,7 +85,10 @@ private:
     AlarmLeds&   _leds;
     AlarmManager _alarms;
     AudioPause   _pause;
-    volatile bool _pauseRequest = false;   // Botón pulsado; lo atiende la tarea en su próximo ciclo
+    static constexpr int32_t NoPauseRequest = -1;
+    volatile int32_t _pauseRequestS = NoPauseRequest;   // Segundos pedidos; los atiende la tarea en su próximo ciclo
+    AlarmAck      _ack;
+    volatile bool _ackRequest = false;     // Botón Reconocer; lo atiende la tarea en su próximo ciclo
 
     Snapshot _snapshot = {};
     mutable SemaphoreHandle_t _mutex = nullptr;

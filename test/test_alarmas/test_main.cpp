@@ -5,12 +5,13 @@
 #include "AlarmBuzzer.h"
 #include "AlarmLeds.h"
 #include "AudioPause.h"
+#include "AlarmAck.h"
 
 // Buzzer y LEDs en la placa: mismos pines que main.cpp
-static const uint8_t PinBuzzer     = 25;
+static const uint8_t PinBuzzer     = 13;
 static const bool    BuzzerPassive = true;
 static AlarmBuzzer buzzer(PinBuzzer, BuzzerPassive);
-static AlarmLeds   leds(32, 33, 14, 13);      // Verde, azul, amarillo, rojo
+static AlarmLeds   leds(27, 25, 33, 32);      // Verde, azul, amarillo, rojo
 
 void setUp() {}
 void tearDown() {}
@@ -118,12 +119,72 @@ void test_texto_ble_sigue_con_8_posiciones() {
 }
 
 // ========================================
+// PRIORIDAD POR ALARMA, TECNICAS Y BARRA DE ALARMAS
+// ========================================
+
+void test_temperatura_leve_y_luego_media() {
+    AlarmManager m;
+    m.setAlarm(AlarmType::TEMP_HIGH, true, AlarmPriority::MINOR);
+    TEST_ASSERT_EQUAL(AlarmPriority::MINOR, m.highestPriority());
+    m.clearChanged();
+
+    m.setAlarm(AlarmType::TEMP_HIGH, true, AlarmPriority::MEDIUM);   // Siguió subiendo
+    TEST_ASSERT_EQUAL(AlarmPriority::MEDIUM, m.highestPriority());
+    TEST_ASSERT_FALSE(m.hasChanged());                              // El texto BLE no cambió
+}
+
+void test_tecnica_no_va_al_texto_ble() {
+    AlarmManager m;
+    m.setTech(TechAlarm::BP_CAL_LOST, true);
+    TEST_ASSERT_TRUE(m.isTechActive(TechAlarm::BP_CAL_LOST));
+    TEST_ASSERT_EQUAL_STRING("00000000", m.getAlarmString());
+    TEST_ASSERT_FALSE(m.hasChanged());
+    TEST_ASSERT_EQUAL(AlarmPriority::MINOR, m.highestPriority());
+
+    m.setTech(TechAlarm::BP_CAL_LOST, false);
+    TEST_ASSERT_EQUAL(AlarmPriority::NONE, m.highestPriority());
+}
+
+void test_barra_sin_alarmas_vacia() {
+    AlarmManager m;
+    char bar[24] = "x";
+    TEST_ASSERT_EQUAL(AlarmPriority::NONE, m.barText(bar, sizeof(bar)));
+    TEST_ASSERT_EQUAL_STRING("", bar);
+}
+
+void test_barra_muestra_la_mas_grave_y_cuenta_las_demas() {
+    AlarmManager m;
+    char bar[24];
+    m.setAlarm(AlarmType::TEMP_HIGH, true, AlarmPriority::MINOR);
+    m.setTech(TechAlarm::BP_CAL_LOST, true);
+    TEST_ASSERT_EQUAL(AlarmPriority::MINOR, m.barText(bar, sizeof(bar)));
+    TEST_ASSERT_EQUAL_STRING("TEMP ALTA +1", bar);              // Empate: la primera
+
+    m.setAlarm(AlarmType::SPO2_LOW, true);
+    TEST_ASSERT_EQUAL(AlarmPriority::CRITICAL, m.barText(bar, sizeof(bar)));
+    TEST_ASSERT_EQUAL_STRING("SpO2 BAJA +2", bar);
+}
+
+void test_escalon_de_temperatura_con_histeresis() {
+    using namespace AlarmConfig;
+    bool severe = false;
+    severe = alarmSevere(severe, 0.5f, TEMP_SEVERE_C, TEMP_SEVERE_HYST_C);   // 38,5: leve
+    TEST_ASSERT_FALSE(severe);
+    severe = alarmSevere(severe, 1.1f, TEMP_SEVERE_C, TEMP_SEVERE_HYST_C);   // 39,1: media
+    TEST_ASSERT_TRUE(severe);
+    severe = alarmSevere(severe, 0.9f, TEMP_SEVERE_C, TEMP_SEVERE_HYST_C);   // 38,9: sigue media
+    TEST_ASSERT_TRUE(severe);
+    severe = alarmSevere(severe, 0.7f, TEMP_SEVERE_C, TEMP_SEVERE_HYST_C);   // 38,7: vuelve a leve
+    TEST_ASSERT_FALSE(severe);
+}
+
+// ========================================
 // AUDIO PAUSE (pausa del sonido de alarma)
 // ========================================
 
 void test_pausa_cuenta_y_termina() {
     AudioPause p;
-    p.toggle("10000000");
+    p.set("10000000", 120);                                 // 53 10 78 00
     TEST_ASSERT_TRUE(p.active());
     TEST_ASSERT_EQUAL_UINT16(AudioPause::DurationS, p.secondsLeft());
     for (uint16_t i = 1; i < AudioPause::DurationS; i++) {
@@ -136,7 +197,7 @@ void test_pausa_cuenta_y_termina() {
 
 void test_pausa_alarma_nueva_la_corta() {
     AudioPause p;
-    p.toggle("10000000");
+    p.set("10000000", 120);
     p.tick("00000000");                                     // Se va la alarma: la pausa sigue
     TEST_ASSERT_TRUE(p.active());
     p.tick("10000000");                                     // Vuelve la misma: sigue
@@ -145,13 +206,70 @@ void test_pausa_alarma_nueva_la_corta() {
     TEST_ASSERT_FALSE(p.active());
 }
 
-void test_pausa_segundo_toque_la_cancela() {
+void test_pausa_cero_la_cancela() {
     AudioPause p;
-    p.toggle("00000000");                                   // También sin alarmas (pre-silencio)
+    p.set("00000000", 120);                                 // También sin alarmas (pre-silencio)
     TEST_ASSERT_TRUE(p.active());
-    p.toggle("00000000");
+    p.set("00000000", 0);                                   // Segundo toque: la pantalla manda 0
     TEST_ASSERT_FALSE(p.active());
     TEST_ASSERT_EQUAL_UINT16(0, p.secondsLeft());
+}
+
+void test_pausa_se_recorta_al_maximo() {
+    AudioPause p;
+    p.set("00000000", 600);                                 // Valor de más: no calla 10 min
+    TEST_ASSERT_EQUAL_UINT16(AudioPause::DurationS, p.secondsLeft());
+}
+
+void test_pausa_repetida_es_idempotente() {
+    // Estado explícito: dos 120 seguidos (mensaje duplicado) no la cancelan, como hacía el toggle
+    AudioPause p;
+    p.set("00000000", 120);
+    p.set("00000000", 120);
+    TEST_ASSERT_TRUE(p.active());
+}
+
+// ========================================
+// RECONOCER (53 13)
+// ========================================
+
+void test_reconocer_calla_las_activas() {
+    AlarmManager m;
+    AlarmAck a;
+    m.setAlarm(AlarmType::SPO2_LOW, true);
+    a.acknowledge(m.getAlarmString());
+    TEST_ASSERT_EQUAL(AlarmPriority::NONE, m.priorityExcept(a.acked()));      // Buzzer callado
+    TEST_ASSERT_EQUAL(AlarmPriority::CRITICAL, m.highestPriority());         // LED y barra siguen
+}
+
+void test_reconocer_alarma_nueva_suena() {
+    AlarmManager m;
+    AlarmAck a;
+    m.setAlarm(AlarmType::TEMP_HIGH, true, AlarmPriority::MINOR);
+    a.acknowledge(m.getAlarmString());
+    m.setAlarm(AlarmType::HR_HIGH, true);
+    a.tick(m.getAlarmString());
+    TEST_ASSERT_EQUAL(AlarmPriority::CRITICAL, m.priorityExcept(a.acked()));
+}
+
+void test_reconocida_que_vuelve_suena() {
+    AlarmManager m;
+    AlarmAck a;
+    m.setAlarm(AlarmType::HR_LOW, true);
+    a.acknowledge(m.getAlarmString());
+    m.setAlarm(AlarmType::HR_LOW, false);                       // Se resolvió: se olvida
+    a.tick(m.getAlarmString());
+    m.setAlarm(AlarmType::HR_LOW, true);                        // Vuelve
+    a.tick(m.getAlarmString());
+    TEST_ASSERT_EQUAL(AlarmPriority::CRITICAL, m.priorityExcept(a.acked()));
+}
+
+void test_reconocer_no_calla_las_tecnicas() {
+    AlarmManager m;
+    AlarmAck a;
+    m.setTech(TechAlarm::BP_CAL_LOST, true);
+    a.acknowledge(m.getAlarmString());
+    TEST_ASSERT_EQUAL(AlarmPriority::MINOR, m.priorityExcept(a.acked()));
 }
 
 // ========================================
@@ -180,7 +298,7 @@ void test_buzzer_arranca() {
 }
 
 void test_buzzer_patron_leve() {
-    // Escuchar: 1 pitido suave (el siguiente sería a los 15 s). LED azul
+    // Escuchar: 1 pitido suave y nada más (leve no se repite). LED azul
     buzzer.setPriority(AlarmPriority::MINOR);
     leds.show(AlarmPriority::MINOR);
     TEST_ASSERT_EQUAL(AlarmPriority::MINOR, buzzer.priority());
@@ -244,9 +362,20 @@ void setup() {
     RUN_TEST(test_prioridad_media_temperatura);
     RUN_TEST(test_prioridad_critica_gana);
     RUN_TEST(test_texto_ble_sigue_con_8_posiciones);
+    RUN_TEST(test_temperatura_leve_y_luego_media);
+    RUN_TEST(test_tecnica_no_va_al_texto_ble);
+    RUN_TEST(test_barra_sin_alarmas_vacia);
+    RUN_TEST(test_barra_muestra_la_mas_grave_y_cuenta_las_demas);
+    RUN_TEST(test_escalon_de_temperatura_con_histeresis);
     RUN_TEST(test_pausa_cuenta_y_termina);
     RUN_TEST(test_pausa_alarma_nueva_la_corta);
-    RUN_TEST(test_pausa_segundo_toque_la_cancela);
+    RUN_TEST(test_pausa_cero_la_cancela);
+    RUN_TEST(test_pausa_se_recorta_al_maximo);
+    RUN_TEST(test_pausa_repetida_es_idempotente);
+    RUN_TEST(test_reconocer_calla_las_activas);
+    RUN_TEST(test_reconocer_alarma_nueva_suena);
+    RUN_TEST(test_reconocida_que_vuelve_suena);
+    RUN_TEST(test_reconocer_no_calla_las_tecnicas);
     RUN_TEST(test_leds_secuencia);
     RUN_TEST(test_buzzer_arranca);
     RUN_TEST(test_buzzer_patron_leve);

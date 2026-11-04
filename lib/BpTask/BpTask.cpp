@@ -97,20 +97,31 @@ void BpTask::onBeat() {
     }
 }
 
+bool BpTask::isValidCalibration(float sbp, float dbp) {
+    return sbp >= 70 && sbp <= 250 && dbp >= 40 && dbp <= 150 && sbp >= dbp + 10;
+}
+
 bool  BpTask::startCalibration(float sbp, float dbp) {
     if (_mutex == nullptr) {
         return false;
     }
-    if ( sbp <70 || sbp > 250 || dbp < 40 || dbp > 150 || sbp < dbp + 10) {
+    if (!isValidCalibration(sbp, dbp)) {
         return false;                                  // Valores inválidos
     }
-    if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(1)) != pdTRUE) { // No se pudo tomar el mutex
+    if (xSemaphoreTake(_mutex, pdMS_TO_TICKS(CalMutexMs)) != pdTRUE) { // Ocupado: quien llama reintenta
         return false;
     }
+    uint32_t now = millis();
     _calSbp = sbp;
     _calDbp = dbp;
-    _calRequest = true;
+    _calRequest = true;                          // Se aplica en el próximo latido (onBeat)
+    _calStartMs = now;
+    _lastEcgBeatMs = now;                        // Sin latidos en StaleMs desde el pedido: se cancela
+    _shared.calibrating = true;                  // La pantalla lo ve ya, aunque falte el latido
+    _shared.calibrated  = false;
+    _shared.calProgress = 0;
     xSemaphoreGive(_mutex);
+    _hmi.writeCalibrationStatus(1, 0);
 #ifdef BP_DEBUG
     Serial.printf("bp pedido %.0f/%.0f aceptado\xFF\xFF\xFF", sbp, dbp);
 #endif
@@ -141,10 +152,13 @@ void BpTask::checkTimeout() {
             _shown = false;                      // Sin latidos aceptados: se borra la presión una sola vez
             clear = true;
         }
-        if ((now - _lastEcgBeatMs) > StaleMs && (_shared.calibrated || _shared.calibrating)) {
-            _shared.calibrated  = false;         // Sin latidos del ECG: calibración perdida
+        bool noEcg   = (now - _lastEcgBeatMs) > StaleMs && (_shared.calibrated || _shared.calibrating);
+        bool tooLong = _shared.calibrating && (now - _calStartMs) > CalTimeoutMs;   // Latidos rechazados
+        if (noEcg || tooLong) {
+            _shared.calibrated  = false;         // Sin latidos del ECG o sin juntar BP_NCAL: no vale
             _shared.calibrating = false;
             _shared.calProgress = 0;
+            _calRequest  = false;                // Un pedido que no llegó a aplicarse tampoco vale
             _lostRequest = true;                 // _bp se anula en el hilo de AfeTask (onBeat)
             lost = true;
         }

@@ -20,6 +20,9 @@ const char* const NextionHMI::NumObjects[ValCount] = {
     "jCal.val"
 };
 
+// Fondo de tAlarm: -, leve, media, grave (mismos colores que el .HMI)
+const uint16_t NextionHMI::AlarmBarColors[4] = { 0, 13403, 60644, 41317 };
+
 NextionHMI* NextionHMI::_instance = nullptr;
 
 void easyNexReadCustomCommand (){
@@ -57,8 +60,15 @@ void NextionHMI::begin(uint32_t baudRate, uint8_t rxPin, uint8_t txPin, uint32_t
     if (_calBox == nullptr) {
         _calBox = xQueueCreate(1, sizeof(CalRequest));
     }
+    if (_alarmBox == nullptr) {
+        _alarmBox = xQueueCreate(1, sizeof(AlarmBar));
+    }
+    if (_settingBox == nullptr) {
+        _settingBox = xQueueCreate(SettingQueueSize, sizeof(SettingCmd));
+    }
 
-    if (_vitalsBox == nullptr || _queue == nullptr || _calBox == nullptr) {
+    if (_vitalsBox == nullptr || _queue == nullptr || _calBox == nullptr || _alarmBox == nullptr ||
+        _settingBox == nullptr) {
         return ;
     }
     _instance = this;
@@ -140,22 +150,40 @@ bool NextionHMI::takeCalibrationRequest(int& sbp, int& dbp) {
     return true;
 }
 
-bool NextionHMI::takeAudioPauseRequest() {
-    if (!_pauseRequest) {
+bool NextionHMI::takeSetting(uint8_t& id, uint16_t& value) {
+    SettingCmd cmd;
+    if (_settingBox == nullptr || xQueueReceive(_settingBox, &cmd, 0) != pdTRUE) {
         return false;
     }
-    _pauseRequest = false;
+    id = cmd.id;
+    value = cmd.value;
     return true;
 }
 
-void NextionHMI::writeAudioPause(uint16_t secondsLeft) {
-    if (_queue == nullptr || (int32_t)secondsLeft == _pauseQueued) {
-        return;                         // Sin cambios: no se llena la cola
+void NextionHMI::cancelAudioPause() {
+    if (_queue == nullptr) {
+        return;
     }
-    msg m{msg::AudioPause, 0, 0, (int32_t)secondsLeft};
-    if (xQueueSend(_queue, &m, 0) == pdTRUE) {
-        _pauseQueued = secondsLeft;
+    msg m{msg::CancelPause, 0, 0, 0};
+    xQueueSend(_queue, &m, 0);
+}
+
+void NextionHMI::writeAlarmBar(const char* text, uint8_t level) {
+    if (_alarmBox == nullptr) {
+        return;
     }
+    if (text == nullptr) {
+        text = "";
+    }
+    if (level == _barQueued.level && strncmp(text, _barQueued.text, sizeof(_barQueued.text) - 1) == 0) {
+        return;                         // Sin cambios: no se despierta a la tarea
+    }
+    AlarmBar bar;
+    strncpy(bar.text, text, sizeof(bar.text) - 1);
+    bar.text[sizeof(bar.text) - 1] = '\0';
+    bar.level = level;
+    xQueueOverwrite(_alarmBox, &bar);   // Solo importa la última
+    _barQueued = bar;
 }
 
 void NextionHMI::updateValues(int spo2, int bpm, int pulseRate, int hrVariance, float temperature, int respirationRate) {
@@ -202,7 +230,7 @@ void NextionHMI::_invalidate() {
     for (uint8_t i = 0; i < ValCount; i++) {
         _lastValues[i] = Unknown;
     }
-    _pauseShown = Unknown;
+    _barShown = false;
     _lastValuesTime = millis() - ValuesPeriodMs;  // El próximo updateValues() no espera
 }
 
@@ -213,28 +241,25 @@ void NextionHMI::_onPageLoaded(uint8_t page) {
     for (uint8_t i = 0; i < ValCount; i++) {
         _syncNum(static_cast<ValueId>(i));
     }
-    _syncPause();          // La barra de estado de cada página arranca sin pausa
+    _syncAlarmBar();       // La barra de estado de cada página arranca con tAlarm oculto
 #ifdef NEXTION_DEBUG
     Serial.printf("[nextion] pagina %u\n", page);
 #endif
 }
 
-void NextionHMI::_syncPause() {
-    if (_pauseWanted == Unknown || _pauseWanted == _pauseShown) {
+void NextionHMI::_syncAlarmBar() {
+    if (_barShown) {
         return;
     }
-    if (_pauseWanted == 0) {
-        _myNex.writeStr("vis pPause,0");
-        _myNex.writeStr("tPause.txt", "");
+    if (_barWanted.level == 0 || _barWanted.text[0] == '\0') {
+        _myNex.writeStr("vis tAlarm,0");
     } else {
-        if (_pauseShown <= 0) {                     // Recién empieza o la página es nueva
-            _myNex.writeStr("vis pPause,1");
-        }
-        char txt[8];
-        snprintf(txt, sizeof(txt), "%d:%02d", (int)(_pauseWanted / 60), (int)(_pauseWanted % 60));
-        _myNex.writeStr("tPause.txt", txt);
+        uint8_t level = _barWanted.level > 3 ? 3 : _barWanted.level;
+        _myNex.writeStr("tAlarm.txt", _barWanted.text);
+        _myNex.writeNum("tAlarm.bco", AlarmBarColors[level]);
+        _myNex.writeStr("vis tAlarm,1");
     }
-    _pauseShown = _pauseWanted;
+    _barShown = true;
 }
 
 void NextionHMI::_listen() {
@@ -289,9 +314,12 @@ void NextionHMI::_onCustomCommand() {
                 xQueueOverwrite(_calBox, &req);   // Solo se guarda la última solicitud
             }
             break;
-        case 'A':                                   // printh 23 02 41 <cmd>: teclas de alarma
-            if (len >= 1 && data[0] == AlarmCmdPause) {
-                _pauseRequest = true;
+        case 'S':                                   // printh 23 04 53 <id> + prints <valor>,2
+            if (len >= 3) {
+                SettingCmd cmd;
+                cmd.id = data[0];
+                cmd.value = data[1] | (data[2] << 8);   // prints ...,2: little endian
+                xQueueSend(_settingBox, &cmd, 0);   // Cola llena: se pierde (loop() la vacía cada 10 ms)
             }
             break;
         default:                                    // Grupo desconocido: sus datos ya se leyeron
@@ -323,6 +351,7 @@ void NextionHMI::_taskEntry(void* self) {
 void NextionHMI::_taskLoop() {
     _myNex.writeStr("bkcmd=0");   // Sin respuestas de estado: el RX solo trae comandos útiles
     _myNex.writeStr("sendme");    // Pregunta la página actual (por si el Nextion ya estaba encendido)
+    _myNex.writeStr("main.vaPausa.val=0");   // El ESP32 recién arranca sin pausa: la pantalla tampoco
 
     msg m;
     for (;;) {
@@ -330,6 +359,12 @@ void NextionHMI::_taskLoop() {
             _handle(m);
         }
         _listen();
+        AlarmBar bar;
+        if (xQueueReceive(_alarmBox, &bar, 0) == pdTRUE) {
+            _barWanted = bar;
+            _barShown = false;
+        }
+        _syncAlarmBar();
         _flushVitals();
         _flushSlow();
     }
@@ -366,9 +401,9 @@ void NextionHMI::_handle(const msg& m) {
         case msg::Invalidate:
             _onPageLoaded(_page);
             break;
-        case msg::AudioPause:
-            _pauseWanted = m.value;
-            _syncPause();
+        case msg::CancelPause:
+            _myNex.writeStr("main.vaPausa.val=0");
+            _myNex.writeStr("click mPausaVer,1");   // Oculta pPause y tPause ya, sin esperar a tmPausa
             break;
         default:
             break;

@@ -41,22 +41,34 @@ void AlarmTask::_taskLoop() {
 
         VitalSigns v = _source ? _source() : _collect();   // 1. Reúne los datos de ECG, PPG y BP
         _evaluateAlarms(v);                                 // 2. Evalúa las reglas de alarma
-        AlarmPriority prio = _alarms.highestPriority();
+        _evaluateTech();
+        char bar[sizeof(_snapshot.bar)];
+        AlarmPriority prio = _alarms.barText(bar, sizeof(bar));
         const char* alarms = _alarms.getAlarmString();
-        if (_pauseRequest) {
-            _pauseRequest = false;
-            _pause.toggle(alarms);
+        int32_t pauseS = _pauseRequestS;
+        if (pauseS != NoPauseRequest) {
+            _pauseRequestS = NoPauseRequest;
+            _pause.set(alarms, (uint16_t)pauseS);
         } else {
             _pause.tick(alarms);
         }
-        // 3. Suena / calla según las alarmas (en pausa solo calla el audio)
-        _buzzer.setPriority(_pause.active() ? AlarmPriority::NONE : prio);
+        if (_ackRequest) {
+            _ackRequest = false;
+            _ack.acknowledge(alarms);
+        } else {
+            _ack.tick(alarms);
+        }
+        // 3. Suena / calla según las alarmas (en pausa solo calla el audio; las reconocidas no suenan)
+        AlarmPriority sound = _alarms.priorityExcept(_ack.acked());
+        _buzzer.setPriority(_pause.active() ? AlarmPriority::NONE : sound);
         _leds.show(prio);                                   //    y enciende el LED de esa gravedad
 
         xSemaphoreTake(_mutex, portMAX_DELAY);              // 4. Deja la copia para BLETask
         _snapshot.vitals = v;
         memcpy(_snapshot.alarms, alarms, sizeof(_snapshot.alarms));
         _snapshot.audioPauseS = _pause.secondsLeft();
+        _snapshot.priority = prio;
+        memcpy(_snapshot.bar, bar, sizeof(bar));
         xSemaphoreGive(_mutex);
     }
 }
@@ -82,18 +94,40 @@ void AlarmTask::_evaluateAlarms(const VitalSigns& v) {
         _alarms.setAlarm(AlarmType::SPO2_LOW,
             _spo2LowRule.update(spo2LowOn, spo2LowOff, VITAL_PERSIST_ON_S, VITAL_PERSIST_OFF_S));
     }
-    {   // Temperatura alta
+    bool hasTemp = v.temperature > 0.0f;   // 0 = sin dato
+    {   // Temperatura alta: leve hasta TEMP_SEVERE_C pasado el límite, media más allá
         bool tempHighOn  = v.temperature > TEMP_HIGH_ON;
-        bool tempHighOff = v.temperature <= 0.0f || v.temperature < TEMP_HIGH_OFF;
-        _alarms.setAlarm(AlarmType::TEMP_HIGH,
-            _tempHighRule.update(tempHighOn, tempHighOff, TEMP_PERSIST_ON_S, TEMP_PERSIST_OFF_S));
+        bool tempHighOff = !hasTemp || v.temperature < TEMP_HIGH_OFF;
+        bool active = _tempHighRule.update(tempHighOn, tempHighOff, TEMP_PERSIST_ON_S, TEMP_PERSIST_OFF_S);
+        _tempHighSevere = active && hasTemp &&
+            alarmSevere(_tempHighSevere, v.temperature - TEMP_HIGH_ON, TEMP_SEVERE_C, TEMP_SEVERE_HYST_C);
+        _alarms.setAlarm(AlarmType::TEMP_HIGH, active,
+            _tempHighSevere ? AlarmPriority::MEDIUM : AlarmPriority::MINOR);
     }
-    {   // Temperatura baja
-        bool tempLowOn  = v.temperature > 0.0f && v.temperature < TEMP_LOW_ON;
-        bool tempLowOff = v.temperature <= 0.0f || v.temperature > TEMP_LOW_OFF;
-        _alarms.setAlarm(AlarmType::TEMP_LOW,
-            _tempLowRule.update(tempLowOn, tempLowOff, TEMP_PERSIST_ON_S, TEMP_PERSIST_OFF_S));
+    {   // Temperatura baja: igual, hacia abajo
+        bool tempLowOn  = hasTemp && v.temperature < TEMP_LOW_ON;
+        bool tempLowOff = !hasTemp || v.temperature > TEMP_LOW_OFF;
+        bool active = _tempLowRule.update(tempLowOn, tempLowOff, TEMP_PERSIST_ON_S, TEMP_PERSIST_OFF_S);
+        _tempLowSevere = active && hasTemp &&
+            alarmSevere(_tempLowSevere, TEMP_LOW_ON - v.temperature, TEMP_SEVERE_C, TEMP_SEVERE_HYST_C);
+        _alarms.setAlarm(AlarmType::TEMP_LOW, active,
+            _tempLowSevere ? AlarmPriority::MEDIUM : AlarmPriority::MINOR);
     }
+}
+
+void AlarmTask::_evaluateTech() {
+    // PA sin calibrar: solo si estaba calibrada y se perdió sola (no al empezar ni con Nuevo paciente)
+    if (_bpForget) {
+        _bpWasCalibrated = false;
+        if (!_bpCalibrated) {
+            _bpForget = false;              // BpTask ya la descartó
+        }
+    } else if (_bpCalibrated) {
+        _bpWasCalibrated = true;
+    } else if (_bpCalibrating) {
+        _bpWasCalibrated = false;           // Recalibrando: el aviso ya cumplió
+    }
+    _alarms.setTech(TechAlarm::BP_CAL_LOST, _bpWasCalibrated && !_bpCalibrated);
 }
 
 VitalSigns AlarmTask::_collect() {
@@ -102,6 +136,9 @@ VitalSigns AlarmTask::_collect() {
     PpgTask::Snapshot ppg = _ppg.getSnapshot();
     BpTask::Snapshot  bp  = _bp.getSnapshot();
     BtempTask::Snapshot temp = _temp.getSnapshot();
+
+    _bpCalibrated  = bp.calibrated;     // Para _evaluateTech()
+    _bpCalibrating = bp.calibrating;
 
     VitalSigns v;   // Todo empieza en 0 = "sin dato" (hrv y rr se quedan así)
 

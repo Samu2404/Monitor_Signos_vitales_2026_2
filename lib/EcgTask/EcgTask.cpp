@@ -80,6 +80,12 @@ bool EcgTask:: process (int32_t sample, uint32_t tUs){
         _hmi.writeBPM(0);                         // Se perdió el ECG: se avisa una sola vez
         _bpmShown = false;
     }
+
+    // Umbrales trabados (o nunca hubo latido desde el último aprendizaje): se reaprenden.
+    // RelearnS > BeatTimeoutS, así el 0 de arriba ya se envió
+    if ((float)(_pt.n - _pt.last_qrs_n) > RelearnS * _fs) {
+        pt_reset(&_pt);
+    }
     return result.beat;
 }
 

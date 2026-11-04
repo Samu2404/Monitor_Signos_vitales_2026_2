@@ -418,6 +418,22 @@ bool BLEManager::isEnabled() const {
     return enabled_;
 }
 
+bool BLEManager::disconnectAll() {
+
+    if (!initialized_ || server_ == nullptr) {
+        return false;
+    }
+
+    // advertiseOnDisconnect sigue activo: vuelve a anunciar solo
+    for (uint16_t handle : server_->getPeerDevices()) {
+        server_->disconnect(handle);
+    }
+
+    BLE_LOG.println("[BLE] Cliente desconectado");
+
+    return true;
+}
+
 
 // ============================================
 // 6. CALLBACK DE CONEXION

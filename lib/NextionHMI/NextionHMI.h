@@ -95,16 +95,25 @@ public:
      */
     bool takeCalibrationRequest(int& sbp, int& dbp);
 
-    /** @brief Toma el pedido del botón "Pausar audio" (printh 23 02 41 01)
-     * @return true si se pulsó desde la última llamada
+    /** @brief Toma el siguiente ajuste o acción de la pantalla: printh 23 04 53 <id> + prints <valor>,2
+     * @param id: Id del ajuste (SettingId de Settings.h)
+     * @param value: Valor de 2 bytes (little endian, como lo manda prints ...,2)
+     * @return false si no queda ninguno
+     * @note Llamarlo en un while desde loop(): la cola guarda SettingQueueSize comandos
      */
-    bool takeAudioPauseRequest();
+    bool takeSetting(uint8_t& id, uint16_t& value);
 
-    /** @brief Muestra la pausa de audio en la barra de estado (pPause y tPause)
-     * @param secondsLeft: Segundos que faltan (0 = sin pausa: oculta el icono y vacía el texto)
-     * @note Se puede llamar en cada vuelta de loop(): solo envía cuando cambia
+    /** @brief Corta la pausa de audio en la pantalla (main.vaPausa = 0 y redibuja la barra)
+     * @note La cuenta regresiva la lleva la pantalla; el ESP32 solo la cancela (alarma nueva)
      */
-    void writeAudioPause(uint16_t secondsLeft);
+    void cancelAudioPause();
+
+    /** @brief Muestra la barra de alarmas (tAlarm, encima de tTitulo en todas las páginas)
+     * @param text: Texto de la alarma ("" = sin alarmas: se oculta)
+     * @param level: 0 ninguna, 1 leve, 2 media, 3 grave (igual que AlarmPriority): color de fondo
+     * @note Se puede llamar en cada vuelta de loop(): solo envía cuando cambia. Desde una sola tarea
+     */
+    void writeAlarmBar(const char* text, uint8_t level);
 
     /** @brief Registra una gráfica con su propia tasa de refresco
      * @param id: ID del objeto en la pantalla
@@ -196,7 +205,7 @@ private:
     };
 
     struct msg {
-        enum type {Wave, WaveUpdate, WaveConfig, Num, Invalidate, AudioPause };
+        enum type {Wave, WaveUpdate, WaveConfig, Num, Invalidate, CancelPause };
         type type;
         uint8_t id;
         uint8_t channel;
@@ -224,7 +233,7 @@ private:
     void _invalidate();                          // Solo desde la tarea del HMI (o el constructor)
     void _listen();                              // Lee los comandos que manda el Nextion
     void _onPageLoaded(uint8_t page);
-    void _syncPause();                           // Envía la pausa de audio si la pantalla no la tiene
+    void _syncAlarmBar();                        // Envía la barra de alarmas si la pantalla no la tiene
     
     bool _showsNumbers() const { return _page == PageMain; }
     bool _showsWave(uint8_t id) const {
@@ -253,11 +262,18 @@ private:
     struct CalRequest {        int sbp;        int dbp;    };
     QueueHandle_t _calBox = nullptr;
 
-    static constexpr uint8_t AlarmCmdPause = 0x01;   // printh 23 02 41 01: botón "Pausar audio"
-    volatile bool _pauseRequest = false;             // Lo pone la tarea del HMI; lo toma takeAudioPauseRequest()
-    int32_t _pauseQueued = Unknown;                  // Último valor encolado por writeAudioPause()
-    int32_t _pauseWanted = Unknown;                  // Segundos de pausa pedidos (tarea del HMI)
-    int32_t _pauseShown  = Unknown;                  // Segundos que muestra la pantalla
+    // Ajustes y acciones (grupo 'S'): la tarea del HMI los encola y loop() los toma con takeSetting()
+    struct SettingCmd { uint8_t id; uint16_t value; };
+    static constexpr uint8_t SettingQueueSize = 16;  // El lote de alarms_config son ~7 comandos
+    QueueHandle_t _settingBox = nullptr;
+
+    // Barra de alarmas: writeAlarmBar() deja la última en _alarmBox; la tarea del HMI la envía
+    struct AlarmBar { char text[24]; uint8_t level; };
+    static const uint16_t AlarmBarColors[4];         // Fondo de tAlarm por nivel (0 no se usa)
+    QueueHandle_t _alarmBox = nullptr;
+    AlarmBar _barQueued = {"", 0xFF};                // Última encolada (lado de quien llama)
+    AlarmBar _barWanted = {"", 0};                   // Pedida (tarea del HMI)
+    bool     _barShown  = false;                     // La pantalla ya tiene _barWanted
 
 
 

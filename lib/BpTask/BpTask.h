@@ -38,12 +38,17 @@ public:
     /** @brief Llamar cuando EcgTask detecta latido en la última muestra entregada con pushEcg */
     void onBeat();
 
-    /** @brief Pide calibrar con la medida del tensiómetro. Seguro desde otra tarea (p. ej. loop) 
+    /** @brief Pide calibrar con la medida del tensiómetro. Seguro desde otra tarea (p. ej. loop)
      *  @param sbp Presión sistólica medida [mmHg]
      * @param dbp Presión diastólica medida [mmHg]
-     * @return false si los valores son invalidos
+     * @return false si los valores son invalidos o no se pudo tomar el mutex (reintentar)
+     * @note La pantalla pasa a "calibrando" en seguida. Si en StaleMs no llega ningún latido del ECG,
+     *       o en CalTimeoutMs no se juntan los latidos válidos, checkTimeout() la cancela
      */
     bool startCalibration(float sbp, float dbp);
+
+    /** @brief Mismos rangos que la página de calibración: 70-250 / 40-150 y sistólica >= diastólica + 10 */
+    static bool isValidCalibration(float sbp, float dbp);
 
     /** @brief Si no hay latidos aceptados en StaleMs, borra la presión de la pantalla.
      *  La calibración solo se pierde si el ECG deja de dar latidos en StaleMs (señal perdida);
@@ -57,6 +62,8 @@ public:
 
 private:
     static constexpr uint32_t StaleMs = 5000;   // ms sin latidos aceptados para borrar la presión
+    static constexpr uint32_t CalTimeoutMs = 60000;   // Máximo para juntar BP_NCAL latidos válidos
+    static constexpr uint32_t CalMutexMs   = 50;      // startCalibration() corre en loop(): puede esperar
 
 
 
@@ -69,6 +76,7 @@ private:
     uint32_t _beats = 0;
     uint32_t _lastEcgBeatMs = 0;     // Último latido del ECG (aceptado o no por bp); protegido por _mutex
     bool _lostRequest= false;
+    uint32_t _calStartMs = 0;        // millis() del pedido de calibración; protegido por _mutex
     bool _shown= false;
 
     // Depuración (BP_DEBUG): los escribe onBeat y los lee loop sin mutex; basta para un resumen

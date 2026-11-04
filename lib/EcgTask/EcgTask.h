@@ -61,6 +61,9 @@ private:
     WaveScaler _scaler;
     
     static constexpr float BeatTimeoutS = 3.0f;   // s sin latidos aceptados para borrar la frecuencia cardíaca
+    // s sin latidos para reiniciar el detector: un artefacto deja los umbrales tan altos que los latidos
+    // normales quedan por debajo y nunca vuelven a detectarse. Reaprende con la señal actual (2 s)
+    static constexpr float RelearnS = 6.0f;
     float _fs= ADCsampleRateHz;          // Frecuencia de muestreo del ADC [Hz]
     bool _bpmShown = false;                     // true si la frecuencia cardíaca se muestra en la pantalla
     static volatile bool s_leadOffFlag;          // La ISR solo la marca; _electrodeCheck() la consume

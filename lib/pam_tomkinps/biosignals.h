@@ -72,7 +72,8 @@ float ppg_filter_process(PpgFilter* p, float x);
  *  - mientras la señal está sobre el umbral se sigue su máximo;
  *  - el pulso se acepta al bajar del umbral; su instante es el del máximo;
  *  - FC = promedio de los últimos PPG_PK_RR_COUNT intervalos;
- *  - sin pulsos durante PPG_PK_TIMEOUT_MS la FC vuelve a 0.
+ *  - sin pulsos durante PPG_PK_TIMEOUT_MS la FC vuelve a 0 y se reinicia la amplitud estimada
+ *    (el detector se reengancha en vez de esperar que 'amp' baje sola tras un artefacto).
  * Igual que PanTompkins: no usa malloc y todo el estado vive en la estructura. */
 #define PPG_PK_AMP_TAU_S      4.0f   /* constante de caída de la amplitud [s] (0.999/muestra a 250 Hz) */
 #define PPG_PK_THRESH_FRAC    0.5f   /* umbral = fracción de la amplitud estimada */

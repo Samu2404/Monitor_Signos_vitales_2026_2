@@ -1,6 +1,17 @@
 #include "Settings.h"
+#include <string.h>
 
 using namespace SettingsLimits;
+
+// Límites por defecto de cada tipo (índice = PatientType)
+struct TypeLimits {
+    uint16_t hrLow, hrHigh, spo2Low, tempLow, tempHigh, sysLow, sysHigh, diaLow, diaHigh;
+};
+static const TypeLimits DefaultLimits[] = {
+    //  FC        SpO2  Temp       PA sist    PA diast
+    {   50, 120,  90,   350, 380,  90, 160,   50, 90 },   // Adulto (= valores de fábrica)
+    {   75, 160,  90,   350, 380,  70, 120,   40, 70 },   // Pediátrico
+};
 
 static bool inRange(uint16_t v, uint16_t lo, uint16_t hi) {
     return v >= lo && v <= hi;
@@ -13,9 +24,18 @@ bool settingsValid(const Settings& s) {
         && inRange(s.spo2Low,  Spo2LowMin, Spo2LowMax)
         && inRange(s.tempHigh, TempMin,    TempMax)
         && inRange(s.tempLow,  TempMin,    TempMax)
-        && s.alarmEnable <= 0x0F
+        && inRange(s.sysHigh,  SysMin,     SysMax)
+        && inRange(s.sysLow,   SysMin,     SysMax)
+        && inRange(s.diaHigh,  DiaMin,     DiaMax)
+        && inRange(s.diaLow,   DiaMin,     DiaMax)
+        && inRange(s.bed,      BedMin,     BedMax)
+        && s.patientType <= (uint8_t)PatientType::Pediatric
+        && s.alarmEnable <= AlarmEnableBit::All
+        && s.patientId[PatientIdMax] == '\0'
         && s.hrLow   < s.hrHigh
-        && s.tempLow < s.tempHigh;
+        && s.tempLow < s.tempHigh
+        && s.sysLow  < s.sysHigh
+        && s.diaLow  < s.diaHigh;
 }
 
 bool settingsApply(Settings& s, SettingId id, uint16_t value) {
@@ -41,7 +61,7 @@ bool settingsApply(Settings& s, SettingId id, uint16_t value) {
             s.tempHigh = value;
             return true;
         case SettingId::AlarmEnable:
-            if (value > 0x0F) return false;
+            if (value > AlarmEnableBit::All) return false;
             s.alarmEnable = (uint8_t)value;
             return true;
         case SettingId::Ble:
@@ -51,9 +71,66 @@ bool settingsApply(Settings& s, SettingId id, uint16_t value) {
             if (!inRange(value, VolumeMin, VolumeMax)) return false;
             s.volume = (uint8_t)value;
             return true;
+        case SettingId::PatientType:
+            if (value > (uint16_t)PatientType::Pediatric) return false;
+            s.patientType = (uint8_t)value;     // Los límites cambian recién con Nuevo paciente
+            return true;
+        case SettingId::Bed:
+            if (!inRange(value, BedMin, BedMax)) return false;
+            s.bed = (uint8_t)value;
+            return true;
+        case SettingId::SysLow:
+            if (!inRange(value, SysMin, SysMax)) return false;
+            s.sysLow = value;
+            return true;
+        case SettingId::SysHigh:
+            if (!inRange(value, SysMin, SysMax)) return false;
+            s.sysHigh = value;
+            return true;
+        case SettingId::DiaLow:
+            if (!inRange(value, DiaMin, DiaMax)) return false;
+            s.diaLow = value;
+            return true;
+        case SettingId::DiaHigh:
+            if (!inRange(value, DiaMin, DiaMax)) return false;
+            s.diaHigh = value;
+            return true;
         default:
             return false;                       // Acciones e ids desconocidos no son valores
     }
+}
+
+void settingsDefaultLimits(Settings& s, PatientType type) {
+    const TypeLimits& d = DefaultLimits[type == PatientType::Pediatric ? 1 : 0];
+    s.hrLow    = d.hrLow;
+    s.hrHigh   = d.hrHigh;
+    s.spo2Low  = d.spo2Low;
+    s.tempLow  = d.tempLow;
+    s.tempHigh = d.tempHigh;
+    s.sysLow   = d.sysLow;
+    s.sysHigh  = d.sysHigh;
+    s.diaLow   = d.diaLow;
+    s.diaHigh  = d.diaHigh;
+    s.alarmEnable = AlarmEnableBit::All;
+}
+
+void settingsNewPatient(Settings& s, uint32_t now) {
+    memset(s.patientId, 0, sizeof(s.patientId));
+    s.admittedAt = now;
+    settingsDefaultLimits(s, (PatientType)s.patientType);
+}
+
+bool settingsSetPatientId(Settings& s, const char* txt, size_t len) {
+    if (len > PatientIdMax) {
+        len = PatientIdMax;
+    }
+    for (size_t i = 0; i < len; i++) {
+        uint8_t c = (uint8_t)txt[i];
+        if (c < 0x20 || c > 0x7E) return false;
+    }
+    memset(s.patientId, 0, sizeof(s.patientId));   // Todo en 0: poll() compara con memcmp
+    memcpy(s.patientId, txt, len);
+    return true;
 }
 
 // ========================================
@@ -62,10 +139,10 @@ bool settingsApply(Settings& s, SettingId id, uint16_t value) {
 
 #ifdef ARDUINO
 #include <Preferences.h>
-#include <string.h>
 
 static const char* const NvsNamespace = "config";
-static const char* const NvsKey       = "s2";       // "s" era el formato de 1 byte: se descarta
+static const char* const NvsKey       = "s3";               // "s2" no tenía paciente ni PA
+static const char* const NvsOldKeys[] = { "s", "s2" };      // Formatos viejos: se borran una vez
 
 bool SettingsStore::begin() {
     if (_mutex == nullptr) {
@@ -77,7 +154,12 @@ bool SettingsStore::begin() {
 
     Settings loaded;
     Preferences prefs;
-    if (prefs.begin(NvsNamespace, true)) {
+    if (prefs.begin(NvsNamespace, false)) {             // Lectura/escritura: para borrar las claves viejas
+        for (const char* key : NvsOldKeys) {
+            if (prefs.isKey(key)) {
+                prefs.remove(key);                      // Solo escribe si existía: no gasta flash
+            }
+        }
         // Si el tamaño no coincide (cambió el struct) o los valores no valen: valores de fábrica
         if (prefs.getBytesLength(NvsKey) == sizeof(Settings)) {
             prefs.getBytes(NvsKey, &loaded, sizeof(Settings));
@@ -104,6 +186,12 @@ Settings SettingsStore::get() const {
     return s;
 }
 
+void SettingsStore::_changed() {
+    _version++;
+    _pending = true;
+    _pendingMs = millis();
+}
+
 bool SettingsStore::set(SettingId id, uint16_t value) {
     xSemaphoreTake(_mutex, portMAX_DELAY);
     bool ok = settingsApply(_s, id, value);
@@ -122,9 +210,24 @@ void SettingsStore::resetDefaults() {
     xSemaphoreTake(_mutex, portMAX_DELAY);
     _s = Settings();
     xSemaphoreGive(_mutex);
-    _version++;
-    _pending = true;
-    _pendingMs = millis();
+    _changed();
+}
+
+bool SettingsStore::setPatientId(const char* txt, size_t len) {
+    xSemaphoreTake(_mutex, portMAX_DELAY);
+    bool ok = settingsSetPatientId(_s, txt, len);
+    xSemaphoreGive(_mutex);
+    if (ok) {
+        _changed();
+    }
+    return ok;
+}
+
+void SettingsStore::newPatient(uint32_t now) {
+    xSemaphoreTake(_mutex, portMAX_DELAY);
+    settingsNewPatient(_s, now);
+    xSemaphoreGive(_mutex);
+    _changed();
 }
 
 SettingsStore::Commit SettingsStore::poll() {
@@ -151,11 +254,13 @@ SettingsStore::Commit SettingsStore::poll() {
 
     if (_dirty && millis() - _dirtyMs >= SaveDelayMs) {
         Preferences prefs;
-        if (prefs.begin(NvsNamespace, false)) {
-            prefs.putBytes(NvsKey, &_good, sizeof(Settings));
-            prefs.end();
-            _dirty = false;                     // Si falló, se reintenta en la próxima llamada
+        if (prefs.begin(NvsNamespace, false) &&
+            prefs.putBytes(NvsKey, &_good, sizeof(Settings)) == sizeof(Settings)) {
+            _dirty = false;
+        } else {
+            _dirtyMs = millis();                // Falló: reintenta en SaveDelayMs, no en cada loop
         }
+        prefs.end();
     }
     return result;
 }

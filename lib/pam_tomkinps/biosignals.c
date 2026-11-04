@@ -240,11 +240,18 @@ PPG_Result ppg_process(PpgProcessor* p, float sample, uint32_t t_us) {
         }
     }
 
-    /* Sin pulsos durante el timeout: la FC deja de ser válida */
-    if (p->has_last && (t_us - p->last_beat_us) > PPG_PK_TIMEOUT_MS * 1000u) {
-        p->bpm    = 0.0f;
-        p->rr_n   = 0;
-        p->rr_idx = 0;
+    /* Sin pulsos durante el timeout: la FC deja de ser válida y el detector se reengancha.
+     * Tras un artefacto 'amp' tarda 15-25 s en bajar sola hasta el pulso normal: se reinicia
+     * para que el umbral siga a la señal actual desde el próximo pulso. Se repite cada
+     * timeout mientras no haya pulsos (también si nunca hubo uno). */
+    if ((t_us - p->last_beat_us) > PPG_PK_TIMEOUT_MS * 1000u) {
+        p->bpm          = 0.0f;
+        p->rr_n         = 0;
+        p->rr_idx       = 0;
+        p->has_last     = false;        /* el próximo pulso es la nueva referencia */
+        p->last_beat_us = t_us;         /* marca del reinicio: cuenta el siguiente timeout */
+        p->amp          = 0.0f;
+        p->above        = false;
     }
 
     r.bpm = p->bpm;

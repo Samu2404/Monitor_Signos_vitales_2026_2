@@ -7,6 +7,7 @@
 #include "afe4950_task.h"
 #include "AlarmTask.h"
 #include "BLETask.h"
+#include "Settings.h"
 
 // Monitor de signos vitales
 //   AFE4950 (ECG + PPG + SpO2) -> EcgTask / PpgTask / BpTask -> Nextion
@@ -222,11 +223,41 @@ void loop() {
         lastAfeTry = millis();
     }
 
+    // Pedido de calibración: se guarda hasta que BpTask lo acepte (si el mutex está ocupado, reintenta)
+    static bool calPending = false;
+    static int  calSbp = 0, calDbp = 0;
     int sbp = 0, dbp = 0;
     if (hmi.takeCalibrationRequest(sbp, dbp)) {
-        bp.startCalibration(sbp, dbp);      // Valores inválidos: se ignora el pedido
+        calPending = BpTask::isValidCalibration(sbp, dbp);   // Valores inválidos: se ignora el pedido
+        calSbp = sbp;
+        calDbp = dbp;
+    }
+    if (calPending && bp.startCalibration(calSbp, calDbp)) {
+        calPending = false;
     }
     bp.checkTimeout();
+
+    // Comandos de la pantalla (53 <id> <valor>). Por ahora pausa de audio y Reconocer;
+    // los ajustes guardados llegan con SettingsStore
+    uint8_t  id;
+    uint16_t value;
+    while (hmi.takeSetting(id, value)) {
+        if (id == (uint8_t)SettingId::PauseAudio) {
+            alarmTask.setAudioPause(value);   // 120 = pausar, 0 = reanudar (la cuenta la lleva la pantalla)
+        } else if (id == (uint8_t)SettingId::Acknowledge) {
+            alarmTask.acknowledge();          // 53 13 00 00
+        }
+    }
+
+    AlarmTask::Snapshot alarms = alarmTask.getSnapshot();
+    hmi.writeAlarmBar(alarms.bar, (uint8_t)alarms.priority);   // Solo envía cuando cambia
+
+    // La pausa terminó en el ESP32 (alarma nueva, tiempo cumplido o reanudada): la pantalla también
+    static uint16_t lastPauseS = 0;
+    if (lastPauseS > 0 && alarms.audioPauseS == 0) {
+        hmi.cancelAudioPause();
+    }
+    lastPauseS = alarms.audioPauseS;
 #if LOG_DATOS
     logPoll();
 #endif

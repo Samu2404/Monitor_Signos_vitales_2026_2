@@ -35,6 +35,9 @@ public:
     // Consultar si BLE esta encendido
     bool isEnabled() const;
 
+    // Desconectar al cliente sin apagar BLE (sigue anunciando: puede volver a conectarse)
+    bool disconnectAll();
+
 private:
 
     // ====================================

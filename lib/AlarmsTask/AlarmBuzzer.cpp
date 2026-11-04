@@ -4,8 +4,8 @@
 // PATRONES DE SONIDO
 // ========================================
 
-// Leve: 1 pitido corto y pausa muy larga
-static const uint16_t MinorSteps[] = {150, 14850};
+// Leve: 1 pitido corto una sola vez al activarse (después solo LED y pantalla: menos fatiga de alarmas)
+static const uint16_t MinorSteps[] = {150, 50};
 
 // Media: 3 pitidos de 200 ms y pausa larga
 static const uint16_t MediumSteps[] = {200, 200, 200, 200, 200, 4800};
@@ -126,6 +126,7 @@ void AlarmBuzzer::_taskLoop() {
                 break;
         }
 
+        bool changed = false;
         for (uint8_t i = 0; i < pat.count; i++) {
             bool on = (i % 2) == 0;             // Pasos pares = pitido, impares = pausa
             if (on) {
@@ -134,8 +135,14 @@ void AlarmBuzzer::_taskLoop() {
                 _off();
             }
             if (_wait(pat.steps[i])) {
-                break;                          // Cambió la prioridad: reinicia con el nuevo patrón
+                changed = true;                 // Cambió la prioridad: reinicia con el nuevo patrón
+                break;
             }
+        }
+
+        if (p == AlarmPriority::MINOR && !changed) {
+            _off();
+            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);   // Leve no se repite: espera otra prioridad
         }
     }
 }
